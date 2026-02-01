@@ -25,22 +25,18 @@ export async function logout() {
     redirect('/login')
 }
 
-export async function getUploadUrl(filename: string, contentType: string) {
+export async function uploadVideo(formData: FormData) {
     try {
-        console.log('getUploadUrl called with:', { filename, contentType });
+        const file = formData.get('video') as File;
+        const name = formData.get('name') as string;
+
+        if (!file || !name) {
+            throw new Error('Missing video file or name');
+        }
 
         // Validate environment variables
-        if (!process.env.AWS_ACCESS_KEY_ID) {
-            throw new Error('AWS_ACCESS_KEY_ID is not set');
-        }
-        if (!process.env.AWS_SECRET_ACCESS_KEY) {
-            throw new Error('AWS_SECRET_ACCESS_KEY is not set');
-        }
-        if (!process.env.AWS_REGION) {
-            throw new Error('AWS_REGION is not set');
-        }
-        if (!process.env.S3_BUCKET_NAME) {
-            throw new Error('S3_BUCKET_NAME is not set');
+        if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY || !process.env.AWS_REGION || !process.env.S3_BUCKET_NAME) {
+            throw new Error('AWS credentials or bucket configuration missing');
         }
 
         const s3 = new S3Client({
@@ -51,41 +47,38 @@ export async function getUploadUrl(filename: string, contentType: string) {
             },
         });
 
+        const arrayBuffer = await file.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        const filename = `recording-${Date.now()}-${name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.${file.name.split('.').pop()}`;
+
         const command = new PutObjectCommand({
             Bucket: process.env.S3_BUCKET_NAME,
             Key: filename,
-            ContentType: contentType,
+            Body: buffer,
+            ContentType: file.type,
         });
 
-        const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
-        console.log('Generated presigned URL successfully');
-        return { url };
+        await s3.send(command);
+        console.log('Video uploaded to S3 successfully:', filename);
+
+        const videoUrl = `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${filename}`;
+
+        // Save to DB
+        const saveRes = await saveRecording(name, videoUrl);
+        if (saveRes.error) throw new Error(saveRes.error);
+
+        return { success: true, videoUrl };
     } catch (error: any) {
-        console.error('S3 Error:', error);
-        return { error: error.message || 'Failed to generate upload URL' };
+        console.error('Upload Action Error:', error);
+        return { error: error.message || 'Failed to upload video' };
     }
 }
 
-export async function saveRecording(name: string, videoUrl: string) {
+async function saveRecording(name: string, videoUrl: string) {
     try {
         console.log('saveRecording called with:', { name, videoUrl });
-
-        // Validate environment variables
-        if (!process.env.SUPABASE_URL) {
-            throw new Error('SUPABASE_URL is not set');
-        }
-        if (!process.env.SUPABASE_KEY) {
-            throw new Error('SUPABASE_KEY is not set');
-        }
-
-        const { data, error } = await supabase.from('videourl').insert({ name, video_url: videoUrl });
-
-        if (error) {
-            console.error('Supabase insert error:', error);
-            throw error;
-        }
-
-        console.log('Recording saved successfully:', data);
+        const { error } = await supabase.from('videourl').insert({ name, url: videoUrl });
+        if (error) throw error;
         return { success: true };
     } catch (error: any) {
         console.error('Supabase Error:', error);
@@ -103,10 +96,25 @@ export async function getRecordings() {
 
     const { data, error } = await supabase
         .from('videourl')
-        .select('*');
+        .select('*')
+        .order('created_at', { ascending: false });
 
     if (error) {
         console.error('Supabase Load Error:', error);
+        return { error: error.message };
+    }
+    return { data };
+}
+
+export async function getRecording(id: string) {
+    const { data, error } = await supabase
+        .from('videourl')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+    if (error) {
+        console.error('Supabase Fetch Error:', error);
         return { error: error.message };
     }
     return { data };

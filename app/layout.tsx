@@ -6,8 +6,8 @@ import { Toaster } from 'sonner'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Video Platform',
-  description: 'Record and share videos easily.',
+  title: 'Video Recording Platform',
+  description: 'Professional video recording and management platform.',
 }
 
 export default function RootLayout({
@@ -16,10 +16,10 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en">
       <body className={inter.className}>
         {children}
-        <Toaster position="top-center" theme="dark" />
+        <Toaster position="top-center" />
       </body>
     </html>
   )
