@@ -3,7 +3,7 @@
 import { useState, useRef } from 'react'
 import { uploadVideo } from '../actions'
 import { toast } from 'sonner'
-import { Video, StopCircle, Upload, CheckCircle, RotateCcw, User, ArrowLeft, Play, Maximize, Pause } from 'lucide-react'
+import { Video, StopCircle, Upload, CheckCircle, RotateCcw, User, ArrowLeft, Play, Maximize, Pause, Volume2, VolumeX, FastForward } from 'lucide-react'
 import Link from 'next/link'
 
 export default function RecordPage() {
@@ -18,6 +18,11 @@ export default function RecordPage() {
     const videoRef = useRef<HTMLVideoElement | null>(null)
     const previewVideoRef = useRef<HTMLVideoElement | null>(null)
     const [previewPlaying, setPreviewPlaying] = useState(false)
+    const [playbackRate, setPlaybackRate] = useState(1)
+    const [progress, setProgress] = useState(0)
+    const [isMuted, setIsMuted] = useState(false)
+    const [duration, setDuration] = useState(0)
+    const [currentTime, setCurrentTime] = useState(0)
     const streamRef = useRef<MediaStream | null>(null)
     const chunksRef = useRef<Blob[]>([])
     const mimeTypeRef = useRef<string>('video/webm')
@@ -96,6 +101,45 @@ export default function RecordPage() {
         if (mediaRecorderRef.current && isRecording) {
             mediaRecorderRef.current.stop()
             setIsRecording(false)
+        }
+    }
+
+    const togglePlay = () => {
+        if (previewVideoRef.current) {
+            if (previewPlaying) previewVideoRef.current.pause()
+            else previewVideoRef.current.play()
+        }
+    }
+
+    const toggleMute = () => {
+        if (previewVideoRef.current) {
+            previewVideoRef.current.muted = !isMuted
+            setIsMuted(!isMuted)
+        }
+    }
+
+    const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (previewVideoRef.current && duration && duration !== Infinity) {
+            const seekTime = (parseFloat(e.target.value) / 100) * duration
+            previewVideoRef.current.currentTime = seekTime
+            setProgress(parseFloat(e.target.value))
+        }
+    }
+
+    const formatTime = (time: number) => {
+        if (isNaN(time) || time === Infinity) return '0:00'
+        const mins = Math.floor(time / 60)
+        const secs = Math.floor(time % 60)
+        return `${mins}:${secs.toString().padStart(2, '0')}`
+    }
+
+    const cycleSpeed = () => {
+        if (previewVideoRef.current) {
+            const rates = [1, 1.5, 2]
+            const nextIndex = (rates.indexOf(playbackRate) + 1) % rates.length
+            const newRate = rates[nextIndex]
+            previewVideoRef.current.playbackRate = newRate
+            setPlaybackRate(newRate)
         }
     }
 
@@ -205,78 +249,103 @@ export default function RecordPage() {
                                 className={`w-full h-full object-cover ${!isRecording && !streamRef.current ? 'opacity-0' : 'opacity-100'} transition-opacity duration-500`}
                             />
                         ) : (
-                            <div className="relative w-full h-full group/player bg-black/95">
+                            <div className="relative w-full h-full group/player bg-[#050505]">
                                 <video
                                     key={previewUrl}
                                     ref={previewVideoRef}
                                     src={previewUrl}
                                     onPlay={() => setPreviewPlaying(true)}
                                     onPause={() => setPreviewPlaying(false)}
+                                    onTimeUpdate={(e) => {
+                                        const v = e.currentTarget;
+                                        if (v.duration && v.duration !== Infinity) {
+                                            setProgress((v.currentTime / v.duration) * 100);
+                                            setCurrentTime(v.currentTime);
+                                        }
+                                    }}
                                     onLoadedMetadata={(e) => {
-                                        const v = e.currentTarget as HTMLVideoElement;
+                                        const v = e.currentTarget;
                                         if (v.duration === Infinity || isNaN(v.duration) || v.duration === 0) {
-                                            v.currentTime = 999999;
+                                            v.currentTime = 1e101;
                                             v.ontimeupdate = function () {
                                                 const vid = this as HTMLVideoElement;
                                                 vid.ontimeupdate = null;
                                                 vid.currentTime = 0;
+                                                if (vid.duration && vid.duration !== Infinity) {
+                                                    setDuration(vid.duration);
+                                                }
                                             }
+                                        } else {
+                                            setDuration(v.duration);
                                         }
                                     }}
-                                    className="w-full h-full object-contain"
+                                    className="w-full h-full object-contain cursor-pointer"
                                     playsInline
                                     autoPlay
-                                    muted
+                                    muted={isMuted}
+                                    onClick={togglePlay}
                                     onError={() => toast.error('Playback failed. Please redo.')}
                                 />
 
-                                {/* Loom-style Controls Overlay */}
-                                <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/player:opacity-100 transition-opacity duration-300 flex flex-col justify-end">
-                                    <div className="p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
-                                        <div className="flex items-center gap-4 text-white">
-                                            <button
-                                                onClick={() => {
-                                                    if (previewVideoRef.current) {
-                                                        if (previewVideoRef.current.paused) previewVideoRef.current.play();
-                                                        else previewVideoRef.current.pause();
-                                                    }
-                                                }}
-                                                className="hover:scale-110 transition-transform"
+                                {/* Premium Control Overlay */}
+                                <div className="absolute inset-x-0 bottom-0 p-4 md:p-6 bg-gradient-to-t from-black/98 via-black/40 to-transparent opacity-0 group-hover/player:opacity-100 transition-all duration-700 transform translate-y-4 group-hover/player:translate-y-0">
+                                    <div className="flex flex-col gap-3">
+                                        <div className="relative group/seek h-3 flex items-center px-1">
+                                            <input
+                                                type="range"
+                                                min="0"
+                                                max="100"
+                                                value={isNaN(progress) ? 0 : progress}
+                                                onChange={handleSeek}
+                                                className="absolute inset-0 w-full h-1 bg-white/20 rounded-full appearance-none cursor-pointer overflow-hidden accent-primary [&::-webkit-slider-runnable-track]:h-1 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-0 [&::-webkit-slider-thumb]:h-0"
+                                            />
+                                            <div
+                                                className="h-1 bg-primary rounded-full pointer-events-none transition-[width] duration-100 relative"
+                                                style={{ width: `${isNaN(progress) ? 0 : progress}%` }}
                                             >
-                                                {previewPlaying ? <Pause className="h-6 w-6 fill-white" /> : <Play className="h-6 w-6 fill-white" />}
-                                            </button>
+                                                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-2xl ring-2 ring-primary scale-0 group-hover/seek:scale-100 transition-transform duration-200" />
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-6 md:gap-8">
+                                            <div className="flex items-center gap-4 md:gap-6">
+                                                <button onClick={togglePlay} className="text-white hover:scale-125 transition-all h-8 w-8 flex items-center justify-center">
+                                                    {previewPlaying ? <Pause className="h-6 w-6 fill-white" /> : <Play className="h-6 w-6 fill-white" />}
+                                                </button>
+
+                                                <div className="text-[10px] md:text-sm font-black text-white tabular-nums tracking-[0.1em] uppercase bg-white/5 py-1.5 px-3 rounded-lg border border-white/10 backdrop-blur-md">
+                                                    {formatTime(currentTime)} <span className="text-white/30 mx-1">|</span> {formatTime(duration)}
+                                                </div>
+                                            </div>
 
                                             <div className="flex-1" />
 
-                                            <button
-                                                onClick={(e) => {
-                                                    if (previewVideoRef.current) {
-                                                        const rates = [1, 1.5, 2];
-                                                        const current = previewVideoRef.current.playbackRate;
-                                                        const next = rates[(rates.indexOf(current) + 1) % rates.length];
-                                                        previewVideoRef.current.playbackRate = next;
-                                                        e.currentTarget.innerText = `${next}x`;
-                                                        toast.success(`Speed: ${next}x`);
-                                                    }
-                                                }}
-                                                className="bg-white/10 hover:bg-white/20 px-3 py-1 rounded text-xs font-bold border border-white/10 transition-all min-w-[40px]"
-                                            >
-                                                1x
-                                            </button>
+                                            <div className="flex items-center gap-4 md:gap-6">
+                                                <button onClick={toggleMute} className="text-white/60 hover:text-white transition-all h-6 w-6 flex items-center justify-center hover:scale-110">
+                                                    {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+                                                </button>
 
-                                            <button
-                                                onClick={() => previewVideoRef.current?.requestFullscreen()}
-                                            >
-                                                <Maximize className="h-5 w-5 hover:text-primary transition-colors" />
-                                            </button>
+                                                <button
+                                                    onClick={cycleSpeed}
+                                                    className="bg-white/10 hover:bg-white/20 text-white text-[9px] md:text-[10px] font-black px-3 py-1.5 md:px-5 md:py-2 rounded-full border border-white/20 backdrop-blur-2xl transition-all uppercase tracking-[0.2em] whitespace-nowrap"
+                                                >
+                                                    {playbackRate}x Speed
+                                                </button>
+
+                                                <button onClick={() => previewVideoRef.current?.requestFullscreen()} className="text-white/60 hover:text-white transition-all hover:scale-125">
+                                                    <Maximize className="h-5 w-5 md:h-6 md:w-6" />
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
 
                                 {!previewPlaying && (
-                                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none group-hover/player:bg-black/10 transition-all">
-                                        <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-2xl">
-                                            <Play className="h-8 w-8 text-white fill-white ml-1" />
+                                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none group-hover/player:bg-black/5 transition-all duration-700">
+                                        <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-white/10 backdrop-blur-3xl flex items-center justify-center border border-white/20 shadow-2xl scale-90 group-hover/player:scale-100 transition-all duration-700">
+                                            <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white flex items-center justify-center shadow-2xl">
+                                                <Play className="w-4 h-4 md:w-5 md:h-5 text-primary fill-primary ml-1" />
+                                            </div>
                                         </div>
                                     </div>
                                 )}
