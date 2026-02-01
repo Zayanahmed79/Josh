@@ -165,9 +165,7 @@ export default function SharedVideoPage({ params }: { params: Promise<{ id: stri
                             <span className="font-black text-gray-900 tracking-tight text-lg uppercase">PORTAL</span>
                         </div>
                     </div>
-                    <Link href="/record" className="hidden sm:flex btn-soft-primary px-8 py-2.5 text-sm font-bold rounded-full hover:scale-105 transition-all">
-                        Record New
-                    </Link>
+
                 </div>
             </nav>
 
