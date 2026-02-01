@@ -315,15 +315,7 @@ export default function SharedVideoPage({ params }: { params: Promise<{ id: stri
                                     >
                                         Copy Hub Link
                                     </button>
-                                    <button
-                                        onClick={() => {
-                                            navigator.clipboard.writeText(recording.url);
-                                            toast.success('Source URL copied!');
-                                        }}
-                                        className="btn-soft-secondary w-full py-4 font-black text-[10px] uppercase tracking-[0.2em] rounded-[1.25rem] border-dashed border-2"
-                                    >
-                                        Copy Source URL
-                                    </button>
+
                                 </div>
                                 <p className="text-[10px] text-center text-gray-400 font-bold uppercase tracking-wider px-6 leading-relaxed">
                                     Use the Hub Link for the elite viewing experience.
