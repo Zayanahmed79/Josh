@@ -210,13 +210,15 @@ export default function DashboardClient({ initialRecordings }: { initialRecordin
                                                 <Link
                                                     href={`/v/${rec.id}`}
                                                     target="_blank"
+                                                    onClick={(e) => e.stopPropagation()}
                                                     className="btn-soft-primary flex-1 !text-[11px] !py-3 font-bold uppercase tracking-wider"
                                                 >
                                                     <ExternalLink className="mr-2 h-4 w-4" />
                                                     Review Recording
                                                 </Link>
                                                 <button
-                                                    onClick={() => {
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
                                                         const url = `${window.location.origin}/v/${rec.id}`;
                                                         navigator.clipboard.writeText(url);
                                                         toast.success('Hub Link Copied');
@@ -228,11 +230,12 @@ export default function DashboardClient({ initialRecordings }: { initialRecordin
                                                 </button>
                                             </div>
                                             <button
-                                                onClick={() => {
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
                                                     navigator.clipboard.writeText(rec.url);
                                                     toast.success('Source URL Copied');
                                                 }}
-                                                className="text-[9px] text-gray-400 font-bold uppercase tracking-widest hover:text-gray-600 transition-colors flex items-center justify-center gap-1.5 mt-1 border-t border-gray-50 pt-3"
+                                                className="text-[9px] text-gray-400 font-bold uppercase tracking-widest hover:text-gray-600 transition-colors flex items-center justify-center gap-1.5 mt-1 border-t border-gray-50 pt-3 w-full"
                                             >
                                                 <Copy className="h-2.5 w-2.5" />
                                                 Direct Video Link
