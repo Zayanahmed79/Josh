@@ -14,6 +14,8 @@ export default function RecordPage() {
     const [uploading, setUploading] = useState(false)
     const [submitted, setSubmitted] = useState(false)
     const [isScreenSharing, setIsScreenSharing] = useState(false)
+    const [isFaceOverlay, setIsFaceOverlay] = useState(false)
+    const [showSourceOptions, setShowSourceOptions] = useState(false)
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null)
     const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -29,6 +31,8 @@ export default function RecordPage() {
     const mimeTypeRef = useRef<string>('video/webm')
     const canvasRef = useRef<HTMLCanvasElement | null>(null)
     const drawIntervalRef = useRef<any>(null)
+    const overlayVideoRef = useRef<HTMLVideoElement | null>(null)
+    const isFaceOverlayRef = useRef(false)
 
     const startRecording = async () => {
         if (!name.trim()) {
@@ -59,8 +63,44 @@ export default function RecordPage() {
             const ctx = canvas.getContext('2d')
 
             const drawFrame = () => {
-                if (ctx && videoRef.current) {
-                    ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height)
+                if (!ctx) return
+
+                // Clear and Draw Main (Screen or Camera)
+                if (videoRef.current) {
+                    ctx.drawImage(videoRef.current, 0, 0, 1280, 720)
+                }
+
+                // Draw Overlay (Face) if active
+                if (isFaceOverlayRef.current && overlayVideoRef.current && overlayVideoRef.current.readyState >= 2) {
+                    const size = 280
+                    const padding = 40
+                    const x = 1280 - size - padding
+                    const y = 720 - size - padding
+
+                    ctx.save()
+                    ctx.beginPath()
+                    ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2)
+                    ctx.clip()
+
+                    // Center and crop the camera feed in the circle
+                    const v = overlayVideoRef.current
+                    const sw = v.videoWidth
+                    const sh = v.videoHeight
+                    const s = Math.min(sw, sh)
+                    const sx = (sw - s) / 2
+                    const sy = (sh - s) / 2
+
+                    ctx.drawImage(v, sx, sy, s, s, x, y, size, size)
+
+                    // Add a subtle border
+                    ctx.restore()
+                    ctx.save()
+                    ctx.beginPath()
+                    ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2)
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'
+                    ctx.lineWidth = 12
+                    ctx.stroke()
+                    ctx.restore()
                 }
             }
 
@@ -75,9 +115,11 @@ export default function RecordPage() {
 
             chunksRef.current = []
 
-            const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
-                ? 'video/webm;codecs=vp8,opus'
-                : 'video/webm'
+            const mimeType = [
+                'video/webm;codecs=vp9,opus',
+                'video/webm;codecs=vp8,opus',
+                'video/webm'
+            ].find(type => MediaRecorder.isTypeSupported(type)) || 'video/webm'
 
             mimeTypeRef.current = mimeType
             console.log('Selected MIME:', mimeType)
@@ -101,9 +143,11 @@ export default function RecordPage() {
                 }
 
                 console.log('Success - Blob Size:', (blob.size / 1024 / 1024).toFixed(2), 'MB')
-                const url = URL.createObjectURL(blob)
+                // Use a simpler type for the Blob to improve playback compatibility
+                const videoBlob = new Blob(chunksRef.current, { type: 'video/webm' })
+                const url = URL.createObjectURL(videoBlob)
                 setPreviewUrl(url)
-                setRecordedBlob(blob)
+                setRecordedBlob(videoBlob)
 
                 // Cleanup
                 if (drawIntervalRef.current) {
@@ -114,7 +158,13 @@ export default function RecordPage() {
                     streamRef.current.getTracks().forEach(t => t.stop())
                     streamRef.current = null
                 }
-                // Also stop any additional source streams (camera or screen) currently in the preview
+                // Stop overlay camera if active
+                if (overlayVideoRef.current && overlayVideoRef.current.srcObject) {
+                    const overlayStream = overlayVideoRef.current.srcObject as MediaStream
+                    overlayStream.getTracks().forEach(t => t.stop())
+                    overlayVideoRef.current.srcObject = null
+                }
+                // Stop main preview tracks
                 if (videoRef.current && videoRef.current.srcObject) {
                     const previewStream = videoRef.current.srcObject as MediaStream
                     previewStream.getTracks().forEach(t => t.stop())
@@ -135,53 +185,89 @@ export default function RecordPage() {
             mediaRecorderRef.current.stop()
             setIsRecording(false)
             setIsScreenSharing(false)
+            setIsFaceOverlay(false)
+            isFaceOverlayRef.current = false
+            setShowSourceOptions(false)
         }
     }
 
-    const switchSource = async () => {
+    const startScreenShare = async (withOverlay: boolean) => {
         if (!streamRef.current) return
 
         try {
-            if (!isScreenSharing) {
-                // Switch to Screen Sharing
-                const screenStream = await navigator.mediaDevices.getDisplayMedia({
-                    video: {
-                        displaySurface: 'monitor',
-                    },
-                    audio: false // We keep the mic audio from the original stream
+            const screenStream = await navigator.mediaDevices.getDisplayMedia({
+                video: { displaySurface: 'monitor' },
+                audio: false
+            })
+
+            const screenTrack = screenStream.getVideoTracks()[0]
+
+            // Cleanup current preview tracks
+            if (videoRef.current && videoRef.current.srcObject) {
+                const s = videoRef.current.srcObject as MediaStream
+                s.getVideoTracks().forEach(t => t.stop())
+            }
+
+            if (withOverlay) {
+                // Keep/Start Camera for overlay
+                const cameraStream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 480, height: 480 },
+                    audio: false
                 })
 
-                const screenTrack = screenStream.getVideoTracks()[0]
-
-                // Stop the current video track in the preview (camera)
-                if (videoRef.current && videoRef.current.srcObject) {
-                    const currentStream = videoRef.current.srcObject as MediaStream
-                    currentStream.getVideoTracks().forEach(t => t.stop())
+                if (!overlayVideoRef.current) {
+                    overlayVideoRef.current = document.createElement('video')
+                    overlayVideoRef.current.muted = true
+                    overlayVideoRef.current.playsInline = true
                 }
-
-                if (videoRef.current) {
-                    videoRef.current.srcObject = screenStream
-                }
-
-                setIsScreenSharing(true)
-
-                // Handle if user stops sharing via browser UI
-                screenTrack.onended = () => {
-                    switchToCamera()
-                }
+                overlayVideoRef.current.srcObject = cameraStream
+                await overlayVideoRef.current.play()
+                setIsFaceOverlay(true)
+                isFaceOverlayRef.current = true
             } else {
-                await switchToCamera()
+                setIsFaceOverlay(false)
+                isFaceOverlayRef.current = false
+            }
+
+            if (videoRef.current) {
+                videoRef.current.srcObject = screenStream
+                // Crucial: Ensure the video element is playing so canvas can capture it
+                await videoRef.current.play().catch(console.error)
+            }
+
+            setIsScreenSharing(true)
+            setShowSourceOptions(false)
+
+            screenTrack.onended = () => {
+                switchToCamera()
             }
         } catch (err: any) {
-            console.error("Switch source failed:", err)
+            console.error("Screen share failed:", err)
             if (err.name !== 'NotAllowedError') {
-                toast.error(`Failed to switch source: ${err.message}`)
+                toast.error(`Failed to share screen: ${err.message}`)
             }
+        }
+    }
+
+    const switchSource = () => {
+        if (isScreenSharing) {
+            switchToCamera()
+        } else {
+            setShowSourceOptions(!showSourceOptions)
         }
     }
 
     const switchToCamera = async () => {
-        if (!streamRef.current) return
+        setIsFaceOverlay(false)
+        isFaceOverlayRef.current = false
+        setShowSourceOptions(false)
+
+        // Stop overlay if active
+        if (overlayVideoRef.current && overlayVideoRef.current.srcObject) {
+            const s = overlayVideoRef.current.srcObject as MediaStream
+            s.getTracks().forEach(t => t.stop())
+            overlayVideoRef.current.srcObject = null
+        }
 
         try {
             const cameraStream = await navigator.mediaDevices.getUserMedia({
@@ -197,6 +283,7 @@ export default function RecordPage() {
 
             if (videoRef.current) {
                 videoRef.current.srcObject = cameraStream
+                await videoRef.current.play().catch(console.error)
             }
 
             setIsScreenSharing(false)
@@ -384,9 +471,12 @@ export default function RecordPage() {
                                     className="w-full h-full object-contain cursor-pointer"
                                     playsInline
                                     autoPlay
-                                    muted={isMuted}
+                                    muted={true} // Default to muted for reliable autoplay
                                     onClick={togglePlay}
-                                    onError={() => toast.error('Playback failed. Please redo.')}
+                                    onError={(e) => {
+                                        console.error('Video Error:', e);
+                                        toast.error('Playback failed. This can happen if the browser blocks autoplay or the format is incompatible.');
+                                    }}
                                 />
 
                                 {/* Premium Control Overlay */}
@@ -472,10 +562,13 @@ export default function RecordPage() {
                         )}
 
                         {isRecording && (
-                            <div className="absolute top-6 left-6 z-20">
+                            <div className="absolute top-6 left-6 z-20 flex flex-col items-start gap-2">
                                 <button
                                     onClick={switchSource}
-                                    className="flex items-center gap-2.5 px-4 py-2 bg-white/10 hover:bg-white/20 backdrop-blur-xl rounded-full border border-white/20 transition-all group active:scale-95"
+                                    className={`flex items-center gap-2.5 px-5 py-2.5 backdrop-blur-3xl rounded-full border transition-all group active:scale-95 shadow-xl ${isScreenSharing
+                                        ? 'bg-white/10 hover:bg-white/20 border-white/20'
+                                        : 'bg-primary/90 hover:bg-primary border-primary/20'
+                                        }`}
                                 >
                                     {isScreenSharing ? (
                                         <>
@@ -485,10 +578,39 @@ export default function RecordPage() {
                                     ) : (
                                         <>
                                             <Monitor className="w-4 h-4 text-white group-hover:scale-110 transition-transform" />
-                                            <span className="text-[10px] font-black text-white uppercase tracking-widest">Switch to Screen</span>
+                                            <span className="text-[10px] font-black text-white uppercase tracking-widest">Screen Options</span>
                                         </>
                                     )}
                                 </button>
+
+                                {showSourceOptions && !isScreenSharing && (
+                                    <div className="flex flex-col gap-2 p-2 bg-black/40 backdrop-blur-3xl rounded-2xl border border-white/10 animate-in fade-in slide-in-from-top-2 duration-300">
+                                        <button
+                                            onClick={() => startScreenShare(false)}
+                                            className="flex items-center gap-3 px-4 py-2.5 hover:bg-white/10 rounded-xl transition-all group w-full text-left"
+                                        >
+                                            <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center group-hover:bg-white/20 transition-all">
+                                                <Monitor className="w-4 h-4 text-white/70" />
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <span className="text-[9px] font-black text-white uppercase tracking-widest leading-none mb-0.5">Screen Only</span>
+                                                <span className="text-[8px] font-bold text-white/40 uppercase tracking-tighter">Pure screen sharing</span>
+                                            </div>
+                                        </button>
+                                        <button
+                                            onClick={() => startScreenShare(true)}
+                                            className="flex items-center gap-3 px-4 py-2.5 hover:bg-white/10 rounded-xl transition-all group w-full text-left"
+                                        >
+                                            <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center group-hover:bg-primary/30 transition-all">
+                                                <User className="w-4 h-4 text-primary" />
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <span className="text-[9px] font-black text-white uppercase tracking-widest leading-none mb-0.5">Screen + Face</span>
+                                                <span className="text-[8px] font-bold text-white/40 uppercase tracking-tighter">Overlay your camera</span>
+                                            </div>
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
