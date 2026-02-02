@@ -34,6 +34,7 @@ export default function RecordPage() {
     const drawIntervalRef = useRef<any>(null)
     const overlayVideoRef = useRef<HTMLVideoElement | null>(null)
     const isFaceOverlayRef = useRef(false)
+    const workerRef = useRef<Worker | null>(null)
 
     const startRecording = async (mode: 'face' | 'screen' | 'both' = 'face') => {
         if (!name.trim()) {
@@ -94,12 +95,13 @@ export default function RecordPage() {
                 await videoRef.current.play()
             }
 
-            // Setup Canvas for recording
+            // Setup Canvas for recording (only if needed for overlay)
             const canvas = document.createElement('canvas')
             canvas.width = 1280
             canvas.height = 720
             canvasRef.current = canvas
-            const ctx = canvas.getContext('2d')
+            // Use hardware accelerated context
+            const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true })
 
             const drawFrame = () => {
                 if (!ctx) return
@@ -121,7 +123,6 @@ export default function RecordPage() {
                     ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2)
                     ctx.clip()
 
-                    // Center and crop the camera feed in the circle
                     const v = overlayVideoRef.current
                     const sw = v.videoWidth
                     const sh = v.videoHeight
@@ -143,14 +144,42 @@ export default function RecordPage() {
                 }
             }
 
-            // Use setInterval instead of requestAnimationFrame to be more resilient in background tabs
-            drawIntervalRef.current = setInterval(drawFrame, 1000 / 30)
+            // High-performance background-resilient timer using Web Worker
+            if (!workerRef.current) {
+                const workerCode = `
+                    let interval;
+                    self.onmessage = function(e) {
+                        if (e.data === 'start') {
+                            interval = setInterval(() => self.postMessage('tick'), 1000/30);
+                        } else if (e.data === 'stop') {
+                            clearInterval(interval);
+                        }
+                    };
+                `;
+                const blob = new Blob([workerCode], { type: 'application/javascript' });
+                workerRef.current = new Worker(URL.createObjectURL(blob));
+            }
 
-            const canvasStream = canvas.captureStream(30)
-            const recorderStream = new MediaStream([
-                canvasStream.getVideoTracks()[0],
-                stream.getAudioTracks()[0]
-            ])
+            workerRef.current.onmessage = drawFrame;
+
+            // Define the recorder stream based on mode
+            let recorderStream: MediaStream;
+
+            if (mode === 'both') {
+                // If we need compositing, start the worker loop
+                workerRef.current.postMessage('start');
+                const canvasStream = canvas.captureStream(30)
+                recorderStream = new MediaStream([
+                    canvasStream.getVideoTracks()[0],
+                    stream.getAudioTracks()[0]
+                ])
+            } else {
+                // Face only or Screen only: Direct stream for ZERO lag and maximum quality
+                recorderStream = new MediaStream([
+                    mainVideoTrack,
+                    stream.getAudioTracks()[0]
+                ])
+            }
 
             chunksRef.current = []
 
@@ -163,7 +192,11 @@ export default function RecordPage() {
             mimeTypeRef.current = mimeType
             console.log('Selected MIME:', mimeType)
 
-            const mediaRecorder = new MediaRecorder(recorderStream, { mimeType })
+            // High bitrate (8Mbps) for crystal clear recordings
+            const mediaRecorder = new MediaRecorder(recorderStream, {
+                mimeType,
+                videoBitsPerSecond: 8000000
+            })
             mediaRecorderRef.current = mediaRecorder
 
             mediaRecorder.ondataavailable = (e) => {
@@ -189,6 +222,9 @@ export default function RecordPage() {
                 setRecordedBlob(videoBlob)
 
                 // Cleanup
+                if (workerRef.current) {
+                    workerRef.current.postMessage('stop');
+                }
                 if (drawIntervalRef.current) {
                     clearInterval(drawIntervalRef.current)
                     drawIntervalRef.current = null
