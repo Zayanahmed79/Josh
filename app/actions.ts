@@ -2,7 +2,7 @@
 
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { supabase } from '@/lib/supabase'
 
@@ -118,4 +118,59 @@ export async function getRecording(id: string) {
         return { error: error.message };
     }
     return { data };
+}
+
+export async function deleteRecording(id: string) {
+    const cookieStore = await cookies();
+    const session = cookieStore.get('session');
+
+    if (session?.value !== 'admin') {
+        return { error: 'Unauthorized' };
+    }
+
+    try {
+        // 1. Get the recording details to find the S3 URL
+        const { data: recording, error: fetchError } = await supabase
+            .from('videourl')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (fetchError || !recording) {
+            throw new Error(fetchError?.message || 'Recording not found');
+        }
+
+        // 2. Delete from S3
+        const s3 = new S3Client({
+            region: process.env.AWS_REGION,
+            credentials: {
+                accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+                secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+            },
+        });
+
+        const urlParts = recording.url.split('/');
+        const filename = urlParts[urlParts.length - 1];
+
+        const deleteCommand = new DeleteObjectCommand({
+            Bucket: process.env.S3_BUCKET_NAME,
+            Key: filename,
+        });
+
+        await s3.send(deleteCommand);
+        console.log('Video deleted from S3 successfully:', filename);
+
+        // 3. Delete from Supabase DB
+        const { error: deleteError } = await supabase
+            .from('videourl')
+            .delete()
+            .eq('id', id);
+
+        if (deleteError) throw deleteError;
+
+        return { success: true };
+    } catch (error: any) {
+        console.error('Delete Action Error:', error);
+        return { error: error.message || 'Failed to delete recording' };
+    }
 }

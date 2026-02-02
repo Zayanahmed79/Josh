@@ -16,6 +16,7 @@ export default function RecordPage() {
     const [isScreenSharing, setIsScreenSharing] = useState(false)
     const [isFaceOverlay, setIsFaceOverlay] = useState(false)
     const [showSourceOptions, setShowSourceOptions] = useState(false)
+    const [isSetupMode, setIsSetupMode] = useState(false)
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null)
     const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -34,23 +35,61 @@ export default function RecordPage() {
     const overlayVideoRef = useRef<HTMLVideoElement | null>(null)
     const isFaceOverlayRef = useRef(false)
 
-    const startRecording = async () => {
+    const startRecording = async (mode: 'face' | 'screen' | 'both' = 'face') => {
         if (!name.trim()) {
             toast.error('Please enter your name to begin')
             return
         }
 
         try {
-            console.log('Requesting camera stream...')
+            console.log('Step 1: Requesting base media stream...')
+            // Always need audio
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: { width: 1280, height: 720 },
+                video: mode === 'face' ? { width: 1280, height: 720 } : false,
                 audio: true
             })
 
             streamRef.current = stream
 
+            // If we are starting with screen, we need display media immediately
+            let mainVideoTrack = stream.getVideoTracks()[0]
+
+            if (mode === 'screen' || mode === 'both') {
+                console.log('Step 1b: Requesting screen share...')
+                const screenStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: { displaySurface: 'monitor' },
+                    audio: false
+                })
+                mainVideoTrack = screenStream.getVideoTracks()[0]
+
+                // If it's "both", we also need a camera stream for overlay
+                if (mode === 'both') {
+                    const cameraStream = await navigator.mediaDevices.getUserMedia({
+                        video: { width: 480, height: 480 },
+                        audio: false
+                    })
+                    if (!overlayVideoRef.current) {
+                        overlayVideoRef.current = document.createElement('video')
+                        overlayVideoRef.current.muted = true
+                        overlayVideoRef.current.playsInline = true
+                    }
+                    overlayVideoRef.current.srcObject = cameraStream
+                    await overlayVideoRef.current.play()
+                    setIsFaceOverlay(true)
+                    isFaceOverlayRef.current = true
+                }
+
+                setIsScreenSharing(true)
+
+                // If screen track ends unexpectedly
+                mainVideoTrack.onended = () => {
+                    switchToCamera()
+                }
+            }
+
             if (videoRef.current) {
-                videoRef.current.srcObject = stream
+                const previewMediaStream = new MediaStream([mainVideoTrack])
+                videoRef.current.srcObject = previewMediaStream
                 videoRef.current.muted = true
                 await videoRef.current.play()
             }
@@ -174,8 +213,10 @@ export default function RecordPage() {
 
             mediaRecorder.start(100)
             setIsRecording(true)
+            setIsSetupMode(false)
         } catch (err: any) {
             console.error("Start recording failed:", err)
+            setIsSetupMode(false)
             toast.error(`Recording failed: ${err.message}`)
         }
     }
@@ -616,14 +657,71 @@ export default function RecordPage() {
                     </div>
 
                     <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
-                        {!isRecording && !previewUrl && (
+                        {!isRecording && !previewUrl && !isSetupMode && (
                             <button
-                                onClick={startRecording}
+                                onClick={() => setIsSetupMode(true)}
                                 className="btn-soft-primary h-14 px-8 text-lg"
                             >
                                 <Video className="mr-2 h-5 w-5" />
                                 Start Recording
                             </button>
+                        )}
+
+                        {!isRecording && !previewUrl && isSetupMode && (
+                            <div className="flex flex-col items-center gap-6 w-full animate-in zoom-in-95 duration-300">
+                                <div className="flex flex-wrap justify-center gap-4">
+                                    <button
+                                        onClick={() => startRecording('face')}
+                                        className="flex flex-col items-center gap-3 p-6 bg-white border border-gray-100 rounded-3xl hover:border-primary hover:shadow-2xl hover:shadow-primary/5 transition-all group min-w-[160px]"
+                                    >
+                                        <div className="w-14 h-14 rounded-2xl bg-primary/5 flex items-center justify-center group-hover:bg-primary/10 transition-colors">
+                                            <Camera className="w-6 h-6 text-primary" />
+                                        </div>
+                                        <div className="text-center">
+                                            <span className="block text-[11px] font-black uppercase tracking-widest text-gray-900 leading-none mb-1">Face Only</span>
+                                            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tight">Camera focus</span>
+                                        </div>
+                                    </button>
+
+                                    <button
+                                        onClick={() => startRecording('both')}
+                                        className="flex flex-col items-center gap-3 p-6 bg-white border border-gray-100 rounded-3xl hover:border-primary hover:shadow-2xl hover:shadow-primary/5 transition-all group min-w-[160px]"
+                                    >
+                                        <div className="w-14 h-14 rounded-2xl bg-primary/5 flex items-center justify-center group-hover:bg-primary/10 transition-colors">
+                                            <div className="relative">
+                                                <Monitor className="w-6 h-6 text-primary" />
+                                                <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-white border-2 border-primary flex items-center justify-center">
+                                                    <Camera className="w-2 h-2 text-primary" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="text-center">
+                                            <span className="block text-[11px] font-black uppercase tracking-widest text-gray-900 leading-none mb-1">Face + Screen</span>
+                                            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tight">Overlay active</span>
+                                        </div>
+                                    </button>
+
+                                    <button
+                                        onClick={() => startRecording('screen')}
+                                        className="flex flex-col items-center gap-3 p-6 bg-white border border-gray-100 rounded-3xl hover:border-primary hover:shadow-2xl hover:shadow-primary/5 transition-all group min-w-[160px]"
+                                    >
+                                        <div className="w-14 h-14 rounded-2xl bg-primary/5 flex items-center justify-center group-hover:bg-primary/10 transition-colors">
+                                            <Monitor className="w-6 h-6 text-primary" />
+                                        </div>
+                                        <div className="text-center">
+                                            <span className="block text-[11px] font-black uppercase tracking-widest text-gray-900 leading-none mb-1">Screen Only</span>
+                                            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tight">Full desktop</span>
+                                        </div>
+                                    </button>
+                                </div>
+
+                                <button
+                                    onClick={() => setIsSetupMode(false)}
+                                    className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] hover:text-gray-900 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
                         )}
 
                         {isRecording && (

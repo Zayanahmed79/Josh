@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Copy, Video, Play, Calendar, ExternalLink, Share2, Search, Filter, LogOut, CheckCircle } from 'lucide-react'
+import { Copy, Video, Play, Calendar, ExternalLink, Share2, Search, Filter, LogOut, CheckCircle, Trash2, AlertTriangle, X } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
-import { logout } from '../actions'
+import { logout, deleteRecording } from '../actions'
 import Link from 'next/link'
 
 interface Recording {
@@ -14,9 +15,11 @@ interface Recording {
 }
 
 export default function DashboardClient({ initialRecordings }: { initialRecordings: Recording[] }) {
-    const [recordings] = useState<Recording[]>(initialRecordings)
+    const [recordings, setRecordings] = useState<Recording[]>(initialRecordings)
     const [searchTerm, setSearchTerm] = useState('')
     const [currentPage, setCurrentPage] = useState(1)
+    const [deletingId, setDeletingId] = useState<string | null>(null)
+    const [isDeleting, setIsDeleting] = useState(false)
 
     const filteredRecordings = recordings.filter((rec: Recording) =>
         rec.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -47,6 +50,22 @@ export default function DashboardClient({ initialRecordings }: { initialRecordin
     const handleLogout = async () => {
         await logout()
         window.location.href = '/login'
+    }
+
+    const handleDelete = async () => {
+        if (!deletingId) return
+
+        setIsDeleting(true)
+        const res = await deleteRecording(deletingId)
+        setIsDeleting(false)
+
+        if (res.error) {
+            toast.error(res.error)
+        } else {
+            setRecordings(prev => prev.filter(rec => rec.id !== deletingId))
+            toast.success('Recording deleted successfully')
+            setDeletingId(null)
+        }
     }
 
     const [cardSpeeds, setCardSpeeds] = useState<Record<number, number>>({})
@@ -202,16 +221,17 @@ export default function DashboardClient({ initialRecordings }: { initialRecordin
                                         </div>
 
                                         <div className="flex flex-col gap-3">
-                                            <div className="flex items-center gap-2">
-                                                <Link
-                                                    href={`/v/${rec.id}`}
-                                                    target="_blank"
-                                                    onClick={(e) => e.stopPropagation()}
-                                                    className="btn-soft-primary flex-1 !text-[11px] !py-3 font-bold uppercase tracking-wider"
-                                                >
-                                                    <ExternalLink className="mr-2 h-4 w-4" />
-                                                    Review Recording
-                                                </Link>
+                                            <Link
+                                                href={`/v/${rec.id}`}
+                                                target="_blank"
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="btn-soft-primary flex items-center justify-center !py-3 font-black uppercase tracking-[0.15em] text-[10px] shadow-lg shadow-primary/10 hover:shadow-primary/20"
+                                            >
+                                                <ExternalLink className="mr-2 h-3.5 w-3.5 stroke-[2.5]" />
+                                                Review Recording
+                                            </Link>
+
+                                            <div className="flex gap-2.5">
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
@@ -219,10 +239,21 @@ export default function DashboardClient({ initialRecordings }: { initialRecordin
                                                         navigator.clipboard.writeText(url);
                                                         toast.success('Hub Link Copied');
                                                     }}
-                                                    className="btn-soft-secondary !py-3 !px-3 hover:!bg-primary/5 hover:!text-primary"
+                                                    className="flex-1 h-10 rounded-xl bg-gray-50 border border-gray-100 flex items-center justify-center gap-2 text-gray-400 hover:bg-primary/5 hover:text-primary hover:border-primary/20 transition-all font-black uppercase tracking-widest text-[9px]"
                                                     title="Copy Hub Link"
                                                 >
-                                                    <Share2 className="h-4 w-4" />
+                                                    <Share2 className="h-3.5 w-3.5" />
+                                                    <span>Share Hub</span>
+                                                </button>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (rec.id) setDeletingId(rec.id);
+                                                    }}
+                                                    className="w-10 h-10 shrink-0 rounded-xl bg-gray-50 border border-gray-100 flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-500 hover:border-red-100/50 transition-all shadow-sm"
+                                                    title="Delete Recording"
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
                                                 </button>
                                             </div>
                                         </div>
@@ -290,6 +321,64 @@ export default function DashboardClient({ initialRecordings }: { initialRecordin
                     </div>
                 )}
             </main>
+
+            {/* Premium Delete Confirmation Modal */}
+            <AnimatePresence>
+                {deletingId && (
+                    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setDeletingId(null)}
+                            className="absolute inset-0 bg-gray-900/60 backdrop-blur-md"
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="relative w-full max-w-sm bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-100"
+                        >
+                            <div className="p-7">
+                                <div className="flex justify-between items-start mb-5">
+                                    <div className="w-12 h-12 rounded-xl bg-red-50 flex items-center justify-center text-red-500">
+                                        <AlertTriangle className="w-6 h-6" />
+                                    </div>
+                                    <button
+                                        onClick={() => setDeletingId(null)}
+                                        className="w-9 h-9 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400 hover:text-gray-900 transition-colors"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                </div>
+
+                                <h3 className="text-xl font-black text-gray-900 tracking-tight mb-1.5 uppercase italic">
+                                    Confirm Deletion
+                                </h3>
+                                <p className="text-[10px] font-black text-gray-400 leading-relaxed uppercase tracking-[0.2em]">
+                                    This video will be permanently deleted.
+                                </p>
+                            </div>
+
+                            <div className="p-7 bg-gray-50/50 border-t border-gray-100 flex gap-3">
+                                <button
+                                    onClick={() => setDeletingId(null)}
+                                    className="flex-1 h-11 rounded-xl bg-white border border-gray-200 text-[9px] font-black uppercase tracking-[0.2em] text-gray-400 hover:text-gray-900 hover:border-gray-300 transition-all shadow-sm"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleDelete}
+                                    disabled={isDeleting}
+                                    className="flex-1 h-11 rounded-xl bg-red-500 text-white text-[9px] font-black uppercase tracking-[0.2em] hover:bg-black transition-all shadow-lg shadow-red-500/20 disabled:opacity-50"
+                                >
+                                    {isDeleting ? 'Erasing...' : 'Delete Now'}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     )
 }
