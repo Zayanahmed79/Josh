@@ -43,10 +43,6 @@ export default function DashboardClient({ initialRecordings }: { initialRecordin
         toast.success('Public recording link copied')
     }
 
-    const copyVideoUrl = (url: string) => {
-        navigator.clipboard.writeText(url)
-        toast.success('Video source URL copied')
-    }
 
     const handleLogout = async () => {
         await logout()
@@ -229,17 +225,6 @@ export default function DashboardClient({ initialRecordings }: { initialRecordin
                                                     <Share2 className="h-4 w-4" />
                                                 </button>
                                             </div>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    navigator.clipboard.writeText(rec.url);
-                                                    toast.success('Source URL Copied');
-                                                }}
-                                                className="text-[9px] text-gray-400 font-bold uppercase tracking-widest hover:text-gray-600 transition-colors flex items-center justify-center gap-1.5 mt-1 border-t border-gray-50 pt-3 w-full"
-                                            >
-                                                <Copy className="h-2.5 w-2.5" />
-                                                Direct Video Link
-                                            </button>
                                         </div>
                                     </div>
                                 </div>

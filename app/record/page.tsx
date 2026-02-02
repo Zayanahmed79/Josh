@@ -3,7 +3,7 @@
 import { useState, useRef } from 'react'
 import { uploadVideo } from '../actions'
 import { toast } from 'sonner'
-import { Video, StopCircle, Upload, CheckCircle, RotateCcw, User, ArrowLeft, Play, Maximize, Pause, Volume2, VolumeX, FastForward } from 'lucide-react'
+import { Video, StopCircle, Upload, CheckCircle, RotateCcw, User, ArrowLeft, Play, Maximize, Pause, Volume2, VolumeX, FastForward, Monitor, Camera } from 'lucide-react'
 import Link from 'next/link'
 
 export default function RecordPage() {
@@ -13,6 +13,7 @@ export default function RecordPage() {
     const [previewUrl, setPreviewUrl] = useState<string | null>(null)
     const [uploading, setUploading] = useState(false)
     const [submitted, setSubmitted] = useState(false)
+    const [isScreenSharing, setIsScreenSharing] = useState(false)
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null)
     const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -26,6 +27,8 @@ export default function RecordPage() {
     const streamRef = useRef<MediaStream | null>(null)
     const chunksRef = useRef<Blob[]>([])
     const mimeTypeRef = useRef<string>('video/webm')
+    const canvasRef = useRef<HTMLCanvasElement | null>(null)
+    const drawIntervalRef = useRef<any>(null)
 
     const startRecording = async () => {
         if (!name.trim()) {
@@ -36,7 +39,7 @@ export default function RecordPage() {
         try {
             console.log('Requesting camera stream...')
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: true,
+                video: { width: 1280, height: 720 },
                 audio: true
             })
 
@@ -48,9 +51,30 @@ export default function RecordPage() {
                 await videoRef.current.play()
             }
 
+            // Setup Canvas for recording
+            const canvas = document.createElement('canvas')
+            canvas.width = 1280
+            canvas.height = 720
+            canvasRef.current = canvas
+            const ctx = canvas.getContext('2d')
+
+            const drawFrame = () => {
+                if (ctx && videoRef.current) {
+                    ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height)
+                }
+            }
+
+            // Use setInterval instead of requestAnimationFrame to be more resilient in background tabs
+            drawIntervalRef.current = setInterval(drawFrame, 1000 / 30)
+
+            const canvasStream = canvas.captureStream(30)
+            const recorderStream = new MediaStream([
+                canvasStream.getVideoTracks()[0],
+                stream.getAudioTracks()[0]
+            ])
+
             chunksRef.current = []
 
-            // Simplified MIME selection - often 'video/webm' alone is most stable
             const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
                 ? 'video/webm;codecs=vp8,opus'
                 : 'video/webm'
@@ -58,7 +82,7 @@ export default function RecordPage() {
             mimeTypeRef.current = mimeType
             console.log('Selected MIME:', mimeType)
 
-            const mediaRecorder = new MediaRecorder(stream, { mimeType })
+            const mediaRecorder = new MediaRecorder(recorderStream, { mimeType })
             mediaRecorderRef.current = mediaRecorder
 
             mediaRecorder.ondataavailable = (e) => {
@@ -81,14 +105,23 @@ export default function RecordPage() {
                 setPreviewUrl(url)
                 setRecordedBlob(blob)
 
-                // Cleanup camera
+                // Cleanup
+                if (drawIntervalRef.current) {
+                    clearInterval(drawIntervalRef.current)
+                    drawIntervalRef.current = null
+                }
                 if (streamRef.current) {
                     streamRef.current.getTracks().forEach(t => t.stop())
                     streamRef.current = null
                 }
+                // Also stop any additional source streams (camera or screen) currently in the preview
+                if (videoRef.current && videoRef.current.srcObject) {
+                    const previewStream = videoRef.current.srcObject as MediaStream
+                    previewStream.getTracks().forEach(t => t.stop())
+                    videoRef.current.srcObject = null
+                }
             }
 
-            // Start with a small slice to ensure the header is captured early
             mediaRecorder.start(100)
             setIsRecording(true)
         } catch (err: any) {
@@ -101,6 +134,75 @@ export default function RecordPage() {
         if (mediaRecorderRef.current && isRecording) {
             mediaRecorderRef.current.stop()
             setIsRecording(false)
+            setIsScreenSharing(false)
+        }
+    }
+
+    const switchSource = async () => {
+        if (!streamRef.current) return
+
+        try {
+            if (!isScreenSharing) {
+                // Switch to Screen Sharing
+                const screenStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: {
+                        displaySurface: 'monitor',
+                    },
+                    audio: false // We keep the mic audio from the original stream
+                })
+
+                const screenTrack = screenStream.getVideoTracks()[0]
+
+                // Stop the current video track in the preview (camera)
+                if (videoRef.current && videoRef.current.srcObject) {
+                    const currentStream = videoRef.current.srcObject as MediaStream
+                    currentStream.getVideoTracks().forEach(t => t.stop())
+                }
+
+                if (videoRef.current) {
+                    videoRef.current.srcObject = screenStream
+                }
+
+                setIsScreenSharing(true)
+
+                // Handle if user stops sharing via browser UI
+                screenTrack.onended = () => {
+                    switchToCamera()
+                }
+            } else {
+                await switchToCamera()
+            }
+        } catch (err: any) {
+            console.error("Switch source failed:", err)
+            if (err.name !== 'NotAllowedError') {
+                toast.error(`Failed to switch source: ${err.message}`)
+            }
+        }
+    }
+
+    const switchToCamera = async () => {
+        if (!streamRef.current) return
+
+        try {
+            const cameraStream = await navigator.mediaDevices.getUserMedia({
+                video: { width: 1280, height: 720 },
+                audio: false
+            })
+
+            // Stop the current video track in the preview (screen)
+            if (videoRef.current && videoRef.current.srcObject) {
+                const currentStream = videoRef.current.srcObject as MediaStream
+                currentStream.getVideoTracks().forEach(t => t.stop())
+            }
+
+            if (videoRef.current) {
+                videoRef.current.srcObject = cameraStream
+            }
+
+            setIsScreenSharing(false)
+        } catch (err: any) {
+            console.error("Switch to camera failed:", err)
+            toast.error(`Could not regain camera access: ${err.message}`)
         }
     }
 
@@ -360,12 +462,33 @@ export default function RecordPage() {
                         )}
 
                         {isRecording && (
-                            <div className="absolute top-6 right-6 flex items-center gap-3 px-4 py-2 bg-red-500/90 backdrop-blur-sm rounded-full shadow-lg border border-red-400/50">
+                            <div className="absolute top-6 right-6 flex items-center gap-3 px-4 py-2 bg-red-500/90 backdrop-blur-sm rounded-full shadow-lg border border-red-400/50 z-20">
                                 <span className="relative flex h-3 w-3">
                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
                                     <span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
                                 </span>
-                                <span className="text-xs font-bold text-white tracking-widest">LIVE</span>
+                                <span className="text-xs font-bold text-white tracking-widest uppercase">Recording</span>
+                            </div>
+                        )}
+
+                        {isRecording && (
+                            <div className="absolute top-6 left-6 z-20">
+                                <button
+                                    onClick={switchSource}
+                                    className="flex items-center gap-2.5 px-4 py-2 bg-white/10 hover:bg-white/20 backdrop-blur-xl rounded-full border border-white/20 transition-all group active:scale-95"
+                                >
+                                    {isScreenSharing ? (
+                                        <>
+                                            <Camera className="w-4 h-4 text-white group-hover:scale-110 transition-transform" />
+                                            <span className="text-[10px] font-black text-white uppercase tracking-widest">Switch to Face</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Monitor className="w-4 h-4 text-white group-hover:scale-110 transition-transform" />
+                                            <span className="text-[10px] font-black text-white uppercase tracking-widest">Switch to Screen</span>
+                                        </>
+                                    )}
+                                </button>
                             </div>
                         )}
                     </div>
@@ -398,7 +521,15 @@ export default function RecordPage() {
                                         setPreviewUrl(null)
                                         setRecordedBlob(null)
                                         chunksRef.current = []
-                                        if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop())
+                                        if (streamRef.current) {
+                                            streamRef.current.getTracks().forEach(t => t.stop())
+                                            streamRef.current = null
+                                        }
+                                        if (videoRef.current && videoRef.current.srcObject) {
+                                            const s = videoRef.current.srcObject as MediaStream
+                                            s.getTracks().forEach(t => t.stop())
+                                            videoRef.current.srcObject = null
+                                        }
                                     }}
                                     disabled={uploading}
                                     className="btn-soft-secondary h-14 px-8 text-lg"
