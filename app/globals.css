@@ -35,11 +35,30 @@
 @layer base {
   * {
     border-color: var(--color-border);
+    scroll-behavior: smooth;
   }
 
   body {
     @apply bg-background text-foreground antialiased;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  /* Custom Selection Color */
+  ::selection {
+    @apply bg-primary/20 text-primary;
+  }
+
+  /* Premium Scrollbar */
+  ::-webkit-scrollbar {
+    @apply w-1.5;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 rounded-full hover:bg-gray-400 transition-colors;
   }
 }
 
@@ -54,23 +73,23 @@
 
 /* Sophisticated Buttons */
 .btn-soft-primary {
-  @apply inline-flex items-center justify-center rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-all;
+  @apply inline-flex items-center justify-center rounded-2xl bg-primary px-6 py-3 text-sm font-black uppercase tracking-widest text-primary-foreground shadow-lg shadow-primary/25 transition-all;
 }
 
 .btn-soft-primary:hover {
-  @apply bg-primary/90;
+  @apply bg-primary/95 -translate-y-0.5 shadow-xl shadow-primary/30;
 }
 
 .btn-soft-primary:active {
-  @apply scale-[0.98];
+  @apply scale-[0.98] translate-y-0;
 }
 
 .btn-soft-secondary {
-  @apply inline-flex items-center justify-center rounded-lg bg-white px-5 py-2.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 transition-all;
+  @apply inline-flex items-center justify-center rounded-2xl bg-white px-6 py-3 text-sm font-black uppercase tracking-widest text-gray-900 shadow-sm ring-1 ring-inset ring-gray-200 transition-all;
 }
 
 .btn-soft-secondary:hover {
-  @apply bg-gray-50;
+  @apply bg-gray-50 -translate-y-0.5 shadow-lg;
 }
 
 .btn-soft-secondary:active {

@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Copy, Video, Play, Calendar, ExternalLink, Share2, Search, Filter, LogOut, CheckCircle, Trash2, AlertTriangle, X } from 'lucide-react'
+import { Copy, Video, Play, Calendar, ExternalLink, Share2, Search, Filter, LogOut, CheckCircle, Trash2, AlertTriangle, X, RefreshCcw, Sparkles } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
-import { logout, deleteRecording } from '../actions'
+import { logout, deleteRecording, renewRecording, renewPortal, checkPortalAccess } from '../actions'
 import Link from 'next/link'
 
 interface Recording {
@@ -12,6 +12,7 @@ interface Recording {
     name: string
     url: string
     created_at?: string
+    isExpired?: boolean
 }
 
 export default function DashboardClient({ initialRecordings }: { initialRecordings: Recording[] }) {
@@ -20,6 +21,17 @@ export default function DashboardClient({ initialRecordings }: { initialRecordin
     const [currentPage, setCurrentPage] = useState(1)
     const [deletingId, setDeletingId] = useState<string | null>(null)
     const [isDeleting, setIsDeleting] = useState(false)
+    const [renewingId, setRenewingId] = useState<string | null>(null)
+    const [isRenewingPortal, setIsRenewingPortal] = useState(false)
+    const [portalStatus, setPortalStatus] = useState<{ allowed: boolean, expiresAt?: number, activeId?: string } | null>(null)
+
+    useEffect(() => {
+        async function fetchStatus() {
+            const res = await checkPortalAccess()
+            setPortalStatus(res)
+        }
+        fetchStatus()
+    }, [])
 
     const filteredRecordings = recordings.filter((rec: Recording) =>
         rec.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -41,7 +53,11 @@ export default function DashboardClient({ initialRecordings }: { initialRecordin
     }, [searchTerm, totalPages, currentPage, filteredRecordings.length, startIndex])
 
     const copyGeneralLink = () => {
-        const url = `${window.location.origin}/record`
+        if (!portalStatus?.activeId) {
+            toast.error('Portal is not active. Please renew first.')
+            return
+        }
+        const url = `${window.location.origin}/record/${portalStatus.activeId}`
         navigator.clipboard.writeText(url)
         toast.success('Public recording link copied')
     }
@@ -65,6 +81,36 @@ export default function DashboardClient({ initialRecordings }: { initialRecordin
             setRecordings(prev => prev.filter(rec => rec.id !== deletingId))
             toast.success('Recording deleted successfully')
             setDeletingId(null)
+        }
+    }
+
+    const handleRenew = async (id: string) => {
+        setRenewingId(id)
+        const res = await renewRecording(id)
+        setRenewingId(null)
+
+        if (res.error) {
+            toast.error(res.error)
+        } else {
+            // Replace the old recording with the fresh one in the list
+            setRecordings(prev => prev.map(rec =>
+                rec.id === id ? { ...res.data, isExpired: false } : rec
+            ))
+            toast.success('Link renewed successfully!')
+        }
+    }
+
+    const handleRenewPortal = async () => {
+        setIsRenewingPortal(true)
+        const res = await renewPortal()
+        setIsRenewingPortal(false)
+
+        if (res.error) {
+            toast.error(res.error)
+        } else {
+            toast.success('Public portal link renewed!')
+            // Refresh status immediately from the result
+            setPortalStatus({ allowed: true, activeId: res.id })
         }
     }
 
@@ -121,21 +167,30 @@ export default function DashboardClient({ initialRecordings }: { initialRecordin
 
             <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
                 {/* Metric Analysis Tiles */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-10">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mb-10">
                     {[
                         { label: 'Total Library', value: recordings.length, icon: Video, color: 'text-primary', bg: 'bg-primary/5' },
-                        { label: 'Upload Success', value: recordings.length, icon: CheckCircle, color: 'text-green-500', bg: 'bg-green-500/5' },
-                        { label: 'Activity Date', value: recordings.length > 0 && recordings[0].created_at ? new Date(recordings[0].created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'N/A', icon: Calendar, color: 'text-indigo-500', bg: 'bg-indigo-500/5' }
+                        { label: 'Portal Status', value: portalStatus?.allowed ? 'Active' : 'Expired', icon: Sparkles, color: portalStatus?.allowed ? 'text-green-500' : 'text-red-500', bg: portalStatus?.allowed ? 'bg-green-500/5' : 'bg-red-500/5', portal: true },
+                        { label: 'Upload Success', value: recordings.length, icon: CheckCircle, color: 'text-indigo-500', bg: 'bg-indigo-500/5' },
+                        { label: 'Activity Date', value: recordings.length > 0 && recordings[0].created_at ? new Date(recordings[0].created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'N/A', icon: Calendar, color: 'text-orange-500', bg: 'bg-orange-500/5' }
                     ].map((stat, idx) => (
-                        <div key={idx} className="bg-white border border-gray-100 p-6 rounded-2xl flex items-center gap-5 transition-all hover:shadow-xl hover:shadow-black/5">
+                        <div key={idx} className="bg-white border border-gray-100 p-6 rounded-2xl flex items-center gap-5 transition-all hover:shadow-xl hover:shadow-black/5 relative group">
                             <div className={`w-14 h-14 shrink-0 rounded-xl ${stat.bg} flex items-center justify-center ${stat.color}`}>
                                 <stat.icon className="w-6 h-6" />
                             </div>
-                            <div className="flex flex-col">
+                            <div className="flex flex-col flex-1">
                                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1.5">{stat.label}</span>
                                 <div className="flex items-baseline gap-2">
-                                    <span className="text-2xl font-black text-gray-900 tracking-tight">{stat.value}</span>
-                                    <span className="text-[9px] font-bold text-gray-300 uppercase tracking-tighter">Verified</span>
+                                    <span className="text-xl font-black text-gray-900 tracking-tight">{stat.value}</span>
+                                    {stat.portal && !portalStatus?.allowed && (
+                                        <button
+                                            onClick={handleRenewPortal}
+                                            disabled={isRenewingPortal}
+                                            className="ml-auto text-[9px] font-black text-primary uppercase tracking-[0.1em] hover:underline"
+                                        >
+                                            {isRenewingPortal ? '...' : '[Renew]'}
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -204,6 +259,11 @@ export default function DashboardClient({ initialRecordings }: { initialRecordin
                                             <div className="rounded-full bg-black/60 backdrop-blur-md px-2 py-0.5 text-[10px] font-bold text-white uppercase tracking-wider">
                                                 HD
                                             </div>
+                                            {rec.isExpired && (
+                                                <div className="rounded-full bg-red-500/90 backdrop-blur-md px-2 py-0.5 text-[10px] font-black text-white uppercase tracking-wider">
+                                                    Expired
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
 
@@ -221,15 +281,33 @@ export default function DashboardClient({ initialRecordings }: { initialRecordin
                                         </div>
 
                                         <div className="flex flex-col gap-3">
-                                            <Link
-                                                href={`/v/${rec.id}`}
-                                                target="_blank"
-                                                onClick={(e) => e.stopPropagation()}
-                                                className="btn-soft-primary flex items-center justify-center !py-3 font-black uppercase tracking-[0.15em] text-[10px] shadow-lg shadow-primary/10 hover:shadow-primary/20"
-                                            >
-                                                <ExternalLink className="mr-2 h-3.5 w-3.5 stroke-[2.5]" />
-                                                Review Recording
-                                            </Link>
+                                            {rec.isExpired ? (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (rec.id) handleRenew(rec.id);
+                                                    }}
+                                                    disabled={renewingId === rec.id}
+                                                    className="btn-soft-primary flex items-center justify-center !py-3 font-black uppercase tracking-[0.15em] text-[10px] shadow-lg shadow-primary/10 hover:shadow-primary/20 bg-primary/90"
+                                                >
+                                                    {renewingId === rec.id ? (
+                                                        <RefreshCcw className="mr-2 h-3.5 w-3.5 animate-spin" />
+                                                    ) : (
+                                                        <RefreshCcw className="mr-2 h-3.5 w-3.5" />
+                                                    )}
+                                                    Renew Expired Link
+                                                </button>
+                                            ) : (
+                                                <Link
+                                                    href={`/v/${rec.id}`}
+                                                    target="_blank"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    className="btn-soft-primary flex items-center justify-center !py-3 font-black uppercase tracking-[0.15em] text-[10px] shadow-lg shadow-primary/10 hover:shadow-primary/20"
+                                                >
+                                                    <ExternalLink className="mr-2 h-3.5 w-3.5 stroke-[2.5]" />
+                                                    Review Recording
+                                                </Link>
+                                            )}
 
                                             <div className="flex gap-2.5">
                                                 <button

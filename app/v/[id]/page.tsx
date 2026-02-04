@@ -21,7 +21,9 @@ export default function SharedVideoPage({ params }: { params: Promise<{ id: stri
     useEffect(() => {
         async function load() {
             const res = await getRecording(id)
-            if (res.error) {
+            if (res.error === 'LINK_EXPIRED') {
+                setRecording({ expired: true, name: res.data?.name })
+            } else if (res.error) {
                 toast.error('Failed to load video')
             } else {
                 setRecording(res.data)
@@ -31,45 +33,36 @@ export default function SharedVideoPage({ params }: { params: Promise<{ id: stri
         load()
     }, [id])
 
-    // Effect to fix duration issue and handle metadata
+    // Sync audio/speed properties
     useEffect(() => {
         const video = videoRef.current
-        if (!video || !recording) return
+        if (video) {
+            video.muted = isMuted
+            video.playbackRate = playbackRate
+        }
+    }, [isMuted, playbackRate])
 
-        const handleLoadedMetadata = () => {
-            if (video.duration === Infinity || isNaN(video.duration)) {
-                video.currentTime = 1e101;
-                video.ontimeupdate = function () {
-                    this.ontimeupdate = () => {
-                        setCurrentTime(video.currentTime)
-                        if (video.duration && video.duration !== Infinity) {
-                            setDuration(video.duration)
-                            setProgress((video.currentTime / video.duration) * 100)
-                        }
-                    }
-                    video.currentTime = 0;
-                }
-            } else {
+    const handleLoadedMetadata = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+        const video = e.currentTarget
+        if (video.duration === Infinity || isNaN(video.duration)) {
+            video.currentTime = 1e101
+            video.ontimeupdate = function () {
+                this.ontimeupdate = null
+                video.currentTime = 0
                 setDuration(video.duration)
             }
+        } else {
+            setDuration(video.duration)
         }
+    }
 
-        const updateProgress = () => {
-            setCurrentTime(video.currentTime)
-            if (video.duration && video.duration !== Infinity) {
-                setDuration(video.duration)
-                setProgress((video.currentTime / video.duration) * 100)
-            }
+    const handleTimeUpdate = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+        const video = e.currentTarget
+        setCurrentTime(video.currentTime)
+        if (video.duration && video.duration !== Infinity) {
+            setProgress((video.currentTime / video.duration) * 100)
         }
-
-        video.addEventListener('loadedmetadata', handleLoadedMetadata)
-        video.addEventListener('timeupdate', updateProgress)
-
-        return () => {
-            video.removeEventListener('loadedmetadata', handleLoadedMetadata)
-            video.removeEventListener('timeupdate', updateProgress)
-        }
-    }, [recording])
+    }
 
     const togglePlay = () => {
         if (videoRef.current) {
@@ -145,25 +138,47 @@ export default function SharedVideoPage({ params }: { params: Promise<{ id: stri
         )
     }
 
+    if (recording.expired) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-4">
+                <div className="card-soft bg-white p-12 text-center max-w-md w-full shadow-2xl rounded-[2.5rem] border-none ring-1 ring-black/5">
+                    <div className="mx-auto w-24 h-24 bg-red-50 rounded-full flex items-center justify-center mb-10 overflow-hidden relative group">
+                        <div className="absolute inset-0 bg-red-100 scale-0 group-hover:scale-100 transition-transform duration-500 rounded-full" />
+                        <VolumeX className="w-10 h-10 text-red-500 relative z-10" />
+                    </div>
+                    <div className="flex flex-col gap-2 mb-8">
+                        <span className="text-[10px] font-black uppercase tracking-[0.3em] text-red-400">Security Notice</span>
+                        <h2 className="text-4xl font-black text-gray-900 tracking-tighter lowercase">{recording.name}</h2>
+                    </div>
+                    <p className="text-gray-400 mb-10 text-base font-bold leading-relaxed uppercase tracking-wide">
+                        The transmission link for this recording has expired for security purposes. All content is automatically locked after 7 days.
+                    </p>
+                    <div className="flex flex-col gap-4">
+                        <button
+                            onClick={() => window.location.reload()}
+                            className="btn-soft-primary w-full py-5 rounded-2xl"
+                        >
+                            Refresh Hub
+                        </button>
+                        <Link
+                            href="/"
+                            className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em] hover:text-gray-900 transition-colors"
+                        >
+                            Return to Command Center
+                        </Link>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
     return (
         <div className="min-h-screen bg-white">
             <nav className="border-b border-gray-100 bg-white/80 backdrop-blur-md sticky top-0 z-50">
                 <div className="max-w-6xl mx-auto px-4 h-18 flex items-center justify-between">
-                    <div className="flex items-center gap-6">
-                        <Link
-                            href="/dashboard"
-                            className="flex items-center gap-2 text-gray-400 hover:text-gray-900 transition-colors group"
-                        >
-                            <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center group-hover:bg-gray-100 transition-colors">
-                                <ArrowLeft className="w-4 h-4" />
-                            </div>
-                            <span className="text-xs font-black uppercase tracking-widest hidden sm:inline">Dashboard</span>
-                        </Link>
-                        <div className="h-6 w-px bg-gray-100" />
-                        <div className="flex items-center gap-3">
-                            <Video className="w-5 h-5 text-primary" />
-                            <span className="font-black text-gray-900 tracking-tight text-lg uppercase">PORTAL</span>
-                        </div>
+                    <div className="flex items-center gap-3">
+                        <Video className="w-5 h-5 text-primary" />
+                        <span className="font-black text-gray-900 tracking-tight text-lg uppercase">PORTAL</span>
                     </div>
 
                 </div>
@@ -178,9 +193,12 @@ export default function SharedVideoPage({ params }: { params: Promise<{ id: stri
                                 ref={videoRef}
                                 src={recording.url}
                                 className="w-full h-full object-contain cursor-pointer"
+                                onLoadedMetadata={handleLoadedMetadata}
+                                onTimeUpdate={handleTimeUpdate}
                                 onPlay={() => setIsPlaying(true)}
                                 onPause={() => setIsPlaying(false)}
                                 onClick={togglePlay}
+                                preload="auto"
                                 playsInline
                             />
 
