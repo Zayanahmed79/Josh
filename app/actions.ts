@@ -6,7 +6,7 @@ import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } fro
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { supabase } from '@/lib/supabase'
 
-const EXPIRY_TIME = 5 * 60000 // 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
+const EXPIRY_TIME = 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
 const PORTAL_CONFIG_KEY = '__PORTAL_CONFIG__'
 
 export async function login(prevState: any, formData: FormData) {
