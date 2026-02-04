@@ -208,10 +208,10 @@ export default function DashboardClient({ initialRecordings }: { initialRecordin
                             placeholder="Search by respondent name..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full h-12 bg-white border border-gray-100 rounded-[1rem] pl-12 pr-6 text-sm font-semibold text-gray-900 placeholder:text-gray-300 focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all shadow-sm"
+                            className="w-full h-12 bg-white border border-gray-100 rounded-2xl pl-12 pr-6 text-sm font-semibold text-gray-900 placeholder:text-gray-300 focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all shadow-sm"
                         />
                     </div>
-                    <button className="h-12 px-6 bg-white border border-gray-100 rounded-[1rem] flex items-center gap-2.5 hover:bg-gray-50 transition-all text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-gray-900 shadow-sm whitespace-nowrap">
+                    <button className="h-12 px-6 bg-white border border-gray-100 rounded-2xl flex items-center gap-2.5 hover:bg-gray-50 transition-all text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-gray-900 shadow-sm whitespace-nowrap">
                         <Filter className="w-3.5 h-3.5" />
                         Filters
                     </button>
