@@ -345,3 +345,49 @@ export async function renewPortal() {
         return { error: error.message || 'Failed to renew portal' };
     }
 }
+
+export async function getPresignedUploadUrl(userName: string, fileType: string) {
+    try {
+        if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY || !process.env.AWS_REGION || !process.env.S3_BUCKET_NAME) {
+            throw new Error('AWS credentials or bucket configuration missing');
+        }
+
+        const s3 = new S3Client({
+            region: process.env.AWS_REGION,
+            credentials: {
+                accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+                secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+            },
+        });
+
+        const extension = fileType.split('/')[1] || 'webm';
+        const filename = `recording-${Date.now()}-${userName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.${extension}`;
+        
+        const command = new PutObjectCommand({
+            Bucket: process.env.S3_BUCKET_NAME,
+            Key: filename,
+            ContentType: fileType,
+        });
+
+        const signedUrl = await getSignedUrl(s3, command, { expiresIn: 600 });
+
+        return { success: true, url: signedUrl, filename };
+    } catch (error: any) {
+        console.error('Presigned URL Error:', error);
+        return { error: error.message };
+    }
+}
+
+export async function saveVideoMetadata(name: string, filename: string) {
+    try {
+        const videoUrl = `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${filename}`;
+        
+        const { error } = await supabase.from('videourl').insert({ name, url: videoUrl });
+        if (error) throw error;
+        
+        return { success: true, videoUrl };
+    } catch (error: any) {
+        console.error('Save Metadata Error:', error);
+        return { error: error.message || 'Failed to save recording' };
+    }
+}

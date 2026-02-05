@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, use } from 'react'
-import { uploadVideo, checkPortalAccess } from '../../actions'
+import { uploadVideo, checkPortalAccess, getPresignedUploadUrl, saveVideoMetadata } from '../../actions'
 import { toast } from 'sonner'
 import { Video, User, Play, Pause, Mic, Monitor, X, Check, Trash2 } from 'lucide-react'
 
@@ -75,13 +75,31 @@ export default function RecordPortalPage({ params }: { params: Promise<{ id: str
         setUploading(true)
         setUploadSuccess(false)
         try {
-            const filename = `recording-${Date.now()}.webm`
-            const formData = new FormData()
-            formData.append('video', blob, filename)
-            formData.append('name', name || 'Anonymous')
-            const result = await uploadVideo(formData)
+            const userName = name || 'Anonymous';
             
-            if (result.error) throw new Error(result.error)
+            // 1. Get Presigned URL
+            const presignResult = await getPresignedUploadUrl(userName, blob.type || 'video/webm');
+            if (presignResult.error || !presignResult.url || !presignResult.filename) {
+                throw new Error(presignResult.error || 'Failed to get upload URL');
+            }
+
+            // 2. Upload to S3 directly
+            const uploadRes = await fetch(presignResult.url, {
+                method: 'PUT',
+                body: blob,
+                headers: {
+                    'Content-Type': blob.type || 'video/webm'
+                }
+            });
+
+            if (!uploadRes.ok) {
+                throw new Error(`Upload failed with status: ${uploadRes.status}`);
+            }
+
+            // 3. Save Metadata
+            const saveResult = await saveVideoMetadata(userName, presignResult.filename);
+            
+            if (saveResult.error) throw new Error(saveResult.error)
             
             setUploadSuccess(true)
             toast.success('Recording saved to cloud')
