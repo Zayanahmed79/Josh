@@ -126,7 +126,7 @@ export default function DashboardClient({ initialRecordings }: { initialRecordin
     return (
         <div className="min-h-screen bg-[#F9FAFB]">
             {/* Refined Brand Navbar */}
-            <nav className="sticky top-0 z-[100] bg-white/80 backdrop-blur-xl border-b border-gray-100">
+            <nav className="sticky top-0 z-100 bg-white/80 backdrop-blur-xl border-b border-gray-100">
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <div className="flex h-18 items-center justify-between">
                         <div className="flex items-center gap-6">
@@ -405,7 +405,7 @@ export default function DashboardClient({ initialRecordings }: { initialRecordin
             {/* Premium Delete Confirmation Modal */}
             <AnimatePresence>
                 {deletingId && (
-                    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+                    <div className="fixed inset-0 z-1000 flex items-center justify-center p-4">
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}

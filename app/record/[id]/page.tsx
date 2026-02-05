@@ -284,7 +284,7 @@ export default function RecordPortalPage({ params }: { params: Promise<{ id: str
                         {/* Placeholder / Initial State */}
                         {!isRecording && !previewUrl && !uploading && (
                             <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-50 z-0">
-                                <div className="absolute inset-0 bg-gradient-to-br from-gray-50 to-white" />
+                                <div className="absolute inset-0 bg-linear-to-br from-gray-50 to-white" />
                             </div>
                         )}
 
@@ -392,7 +392,7 @@ export default function RecordPortalPage({ params }: { params: Promise<{ id: str
                                             className="w-9 h-9 rounded-lg bg-red-600 hover:bg-red-500 flex items-center justify-center transition-all shadow-lg shadow-red-600/20 active:scale-95 ml-2"
                                             title="Finish Recording"
                                         >
-                                            <div className="w-3.5 h-3.5 bg-white rounded-[2px]"></div>
+                                            <div className="w-3.5 h-3.5 bg-white rounded-xs"></div>
                                         </button>
                                     </div>
                                 </div>
