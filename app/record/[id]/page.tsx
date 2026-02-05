@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, use } from 'react'
 import { uploadVideo, checkPortalAccess, getPresignedUploadUrl, saveVideoMetadata } from '../../actions'
 import { toast } from 'sonner'
-import { Video, User, Play, Pause, Mic, Monitor, X, Check, Trash2 } from 'lucide-react'
+import { Video, User, Play, Pause, Mic, Monitor, X, Check, Trash2, Volume2, VolumeX, Maximize } from 'lucide-react'
 
 export default function RecordPortalPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params)
@@ -16,6 +16,14 @@ export default function RecordPortalPage({ params }: { params: Promise<{ id: str
     const [previewUrl, setPreviewUrl] = useState<string | null>(null)
     const [uploading, setUploading] = useState(false)
     const [uploadSuccess, setUploadSuccess] = useState(false)
+
+    // Player State
+    const [isPlaying, setIsPlaying] = useState(false)
+    const [progress, setProgress] = useState(0)
+    const [isMuted, setIsMuted] = useState(false)
+    const [volume, setVolume] = useState(1)
+    const [duration, setDuration] = useState(0)
+    const [currentTime, setCurrentTime] = useState(0)
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null)
     const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -49,10 +57,19 @@ export default function RecordPortalPage({ params }: { params: Promise<{ id: str
             video.srcObject = null
             video.src = previewUrl
             video.muted = false
-            video.controls = true
+            video.controls = false
             video.play().catch(e => console.error("Preview play failed", e))
         }
     }, [isRecording, previewUrl])
+
+    // Sync audio properties for preview
+    useEffect(() => {
+        const video = videoRef.current
+        if (video && !isRecording && previewUrl) {
+            video.muted = isMuted
+            video.volume = volume
+        }
+    }, [isMuted, volume, isRecording, previewUrl])
 
     // Cleanup function to stop all tracks
     const cleanupStreams = () => {
@@ -67,6 +84,58 @@ export default function RecordPortalPage({ params }: { params: Promise<{ id: str
             clearInterval(timerRef.current)
             timerRef.current = null
         }
+    }
+
+    const handleLoadedMetadata = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+        const video = e.currentTarget
+        if (video.duration && video.duration !== Infinity) {
+            setDuration(video.duration)
+        } else if (video.duration === Infinity) {
+            video.currentTime = 1e101
+            const onTimeUpdate = () => {
+                video.currentTime = 0
+                video.removeEventListener('timeupdate', onTimeUpdate)
+            }
+            video.addEventListener('timeupdate', onTimeUpdate)
+        }
+    }
+
+    const handleTimeUpdate = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+        const video = e.currentTarget
+        setCurrentTime(video.currentTime)
+        if ((duration === 0 || duration === Infinity) && video.duration && video.duration !== Infinity) {
+            setDuration(video.duration)
+        }
+        if (video.duration && video.duration !== Infinity) {
+            setProgress((video.currentTime / video.duration) * 100)
+        }
+    }
+
+    const togglePlay = () => {
+        if (videoRef.current) {
+            if (isPlaying) videoRef.current.pause()
+            else videoRef.current.play()
+            setIsPlaying(!isPlaying)
+        }
+    }
+
+    const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const video = videoRef.current
+        if (!video) return
+        const d = video.duration !== Infinity ? video.duration : duration
+        if (d && d !== Infinity) {
+            const seekValue = parseFloat(e.target.value)
+            const seekTime = (seekValue / 100) * d
+            video.currentTime = seekTime
+            setProgress(seekValue)
+        }
+    }
+
+    const formatTime = (time: number) => {
+        if (isNaN(time) || time === Infinity) return '0:00'
+        const mins = Math.floor(time / 60)
+        const secs = Math.floor(time % 60)
+        return `${mins}:${secs.toString().padStart(2, '0')}`
     }
 
     const handleAutoUpload = async (blob: Blob) => {
@@ -297,7 +366,89 @@ export default function RecordPortalPage({ params }: { params: Promise<{ id: str
                             playsInline
                             className={`w-full h-full object-contain bg-black transition-opacity duration-300 ${(isRecording || previewUrl) ? 'opacity-100' : 'opacity-0'
                                 }`}
+                            onLoadedMetadata={handleLoadedMetadata}
+                            onTimeUpdate={handleTimeUpdate}
+                            onPlay={() => setIsPlaying(true)}
+                            onPause={() => setIsPlaying(false)}
+                            onClick={() => !isRecording && previewUrl && togglePlay()}
                         />
+
+                        {/* BIG PLAY BUTTON - PREVIEW ONLY */}
+                        {!isRecording && previewUrl && !isPlaying && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/10 hover:bg-black/20 transition-colors cursor-pointer z-10" onClick={togglePlay}>
+                                <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-2xl transform transition-transform hover:scale-110">
+                                    <Play className="w-8 h-8 text-primary fill-primary ml-1" />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* CUSTOM CONTROLS - PREVIEW ONLY */}
+                        {!isRecording && previewUrl && (
+                            <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/80 to-transparent p-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-20">
+                                <div className="flex flex-col gap-2">
+                                    {/* Progress Bar */}
+                                    <div className="relative h-1.5 group/seek cursor-pointer flex items-center">
+                                        <div className="absolute inset-x-0 h-1 bg-white/30 rounded-full overflow-hidden">
+                                            <div 
+                                                className="h-full bg-primary rounded-full transition-all duration-100" 
+                                                style={{ width: `${progress}%` }}
+                                            ></div>
+                                        </div>
+                                        <input
+                                            type="range"
+                                            min="0"
+                                            max="100"
+                                            step="0.1"
+                                            value={progress || 0}
+                                            onChange={handleSeek}
+                                            className="absolute inset-x-0 -inset-y-2 w-full h-auto opacity-0 cursor-pointer z-10"
+                                        />
+                                    </div>
+
+                                    {/* Buttons */}
+                                    <div className="flex items-center justify-between mt-1">
+                                        <div className="flex items-center gap-3">
+                                            <button onClick={togglePlay} className="text-white hover:text-primary transition-colors">
+                                                {isPlaying ? <Pause className="w-5 h-5 fill-white" /> : <Play className="w-5 h-5 fill-white" />}
+                                            </button>
+                                            <span className="text-xs font-medium text-white tabular-nums">
+                                                {formatTime(currentTime)} / {formatTime(duration)}
+                                            </span>
+                                        </div>
+
+                                        <div className="flex items-center gap-3 text-white">
+                                            <div className="flex items-center gap-2 group/volume relative">
+                                                <button 
+                                                    onClick={() => setIsMuted(!isMuted)} 
+                                                    className="text-white hover:text-primary transition-colors"
+                                                >
+                                                    {isMuted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+                                                </button>
+                                                <div className="w-0 group-hover/volume:w-20 overflow-hidden transition-all duration-300 flex items-center">
+                                                    <input
+                                                        type="range"
+                                                        min="0"
+                                                        max="1"
+                                                        step="0.1"
+                                                        value={isMuted ? 0 : volume}
+                                                        onChange={(e) => {
+                                                            const newVol = parseFloat(e.target.value)
+                                                            setVolume(newVol)
+                                                            if (newVol > 0) setIsMuted(false)
+                                                        }}
+                                                        className="w-16 h-1 bg-white/30 rounded-full appearance-none cursor-pointer accent-white"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <button onClick={() => videoRef.current?.requestFullscreen()} className="hover:text-primary transition-colors">
+                                                <Maximize className="w-5 h-5" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Placeholder / Initial State */}
                         {!isRecording && !previewUrl && !uploading && (

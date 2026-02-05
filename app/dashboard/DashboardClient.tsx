@@ -168,33 +168,55 @@ export default function DashboardClient({ initialRecordings }: { initialRecordin
             <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
                 {/* Metric Analysis Tiles */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
-                    {[
-                        { label: 'Total Videos', value: recordings.length, icon: Video, color: 'text-gray-900', bg: 'bg-gray-100' },
-                        { label: 'Portal Status', value: portalStatus?.allowed ? 'Active' : 'Expired', icon: Sparkles, color: portalStatus?.allowed ? 'text-green-600' : 'text-amber-600', bg: portalStatus?.allowed ? 'bg-green-50' : 'bg-amber-50', portal: true },
-                        { label: 'Completed Uploads', value: recordings.length, icon: CheckCircle, color: 'text-blue-600', bg: 'bg-blue-50' },
-                        { label: 'Last Activity', value: recordings.length > 0 && recordings[0].created_at ? new Date(recordings[0].created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'N/A', icon: Calendar, color: 'text-purple-600', bg: 'bg-purple-50' }
-                    ].map((stat, idx) => (
-                        <div key={idx} className="bg-white border border-gray-200 p-6 rounded-xl flex items-center gap-5 transition-all shadow-sm hover:shadow-md relative group">
-                            <div className={`w-12 h-12 shrink-0 rounded-lg ${stat.bg} flex items-center justify-center ${stat.color}`}>
-                                <stat.icon className="w-6 h-6" />
-                            </div>
-                            <div className="flex flex-col flex-1">
-                                <span className="text-xs font-medium text-gray-500 uppercase tracking-wide leading-none mb-2">{stat.label}</span>
-                                <div className="flex items-baseline gap-2">
-                                    <span className="text-2xl font-semibold text-gray-900 tracking-tight">{stat.value}</span>
-                                    {stat.portal && !portalStatus?.allowed && (
-                                        <button
-                                            onClick={handleRenewPortal}
-                                            disabled={isRenewingPortal}
-                                            className="ml-auto text-xs font-bold text-primary uppercase tracking-wider hover:underline"
-                                        >
-                                            {isRenewingPortal ? '...' : 'Renew'}
-                                        </button>
-                                    )}
+                    {portalStatus === null ? (
+                        // Full Card Skeletons for all 4 boxes
+                        Array.from({ length: 4 }).map((_, idx) => (
+                            <div key={idx} className="bg-white border border-gray-200 p-6 rounded-xl flex items-center gap-5 shadow-sm">
+                                <div className="w-12 h-12 shrink-0 rounded-lg bg-gray-50 animate-pulse flex items-center justify-center">
+                                    <div className="w-6 h-6 bg-gray-100 rounded" />
+                                </div>
+                                <div className="flex flex-col flex-1 gap-2.5">
+                                    <div className="h-3 w-16 bg-gray-50 animate-pulse rounded" />
+                                    <div className="h-8 w-24 bg-gray-100 animate-pulse rounded-lg" />
                                 </div>
                             </div>
-                        </div>
-                    ))}
+                        ))
+                    ) : (
+                        [
+                            { label: 'Total Videos', value: recordings.length, icon: Video, color: 'text-gray-900', bg: 'bg-gray-100' },
+                            { 
+                                label: 'Portal Status', 
+                                value: portalStatus.allowed ? 'Active' : 'Expired', 
+                                icon: Sparkles, 
+                                color: portalStatus.allowed ? 'text-green-600' : 'text-amber-600', 
+                                bg: portalStatus.allowed ? 'bg-green-50' : 'bg-amber-50', 
+                                portal: true 
+                            },
+                            { label: 'Completed Uploads', value: recordings.length, icon: CheckCircle, color: 'text-blue-600', bg: 'bg-blue-50' },
+                            { label: 'Last Activity', value: recordings.length > 0 && recordings[0].created_at ? new Date(recordings[0].created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'N/A', icon: Calendar, color: 'text-purple-600', bg: 'bg-purple-50' }
+                        ].map((stat, idx) => (
+                            <div key={idx} className="bg-white border border-gray-200 p-6 rounded-xl flex items-center gap-5 transition-all shadow-sm hover:shadow-md relative group">
+                                <div className={`w-12 h-12 shrink-0 rounded-lg ${stat.bg} flex items-center justify-center ${stat.color}`}>
+                                    <stat.icon className="w-6 h-6" />
+                                </div>
+                                <div className="flex flex-col flex-1">
+                                    <span className="text-xs font-medium text-gray-500 uppercase tracking-wide leading-none mb-2">{stat.label}</span>
+                                    <div className="flex items-baseline gap-2">
+                                        <span className="text-2xl font-semibold text-gray-900 tracking-tight">{stat.value}</span>
+                                        {stat.portal && !portalStatus.allowed && (
+                                            <button
+                                                onClick={handleRenewPortal}
+                                                disabled={isRenewingPortal}
+                                                className="ml-auto text-xs font-bold text-primary uppercase tracking-wider hover:underline"
+                                            >
+                                                {isRenewingPortal ? '...' : 'Renew'}
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        ))
+                    )}
                 </div>
 
                 {/* Action Bar */}

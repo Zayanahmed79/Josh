@@ -14,6 +14,7 @@ export default function SharedVideoPage({ params }: { params: Promise<{ id: stri
     const [playbackRate, setPlaybackRate] = useState(1)
     const [progress, setProgress] = useState(0)
     const [isMuted, setIsMuted] = useState(false)
+    const [volume, setVolume] = useState(1)
     const [duration, setDuration] = useState(0)
     const [currentTime, setCurrentTime] = useState(0)
     const videoRef = useRef<HTMLVideoElement>(null)
@@ -38,11 +39,27 @@ export default function SharedVideoPage({ params }: { params: Promise<{ id: stri
         const video = videoRef.current
         if (video) {
             video.muted = isMuted
+            video.volume = volume
             video.playbackRate = playbackRate
         }
-    }, [isMuted, playbackRate])
+    }, [isMuted, volume, playbackRate])
 
     const handleLoadedMetadata = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+        const video = e.currentTarget
+        if (video.duration && video.duration !== Infinity) {
+            setDuration(video.duration)
+        } else if (video.duration === Infinity) {
+            // Chrome/WebM hack: seek to a very large time to force duration detection
+            video.currentTime = 1e101
+            const onTimeUpdate = () => {
+                video.currentTime = 0
+                video.removeEventListener('timeupdate', onTimeUpdate)
+            }
+            video.addEventListener('timeupdate', onTimeUpdate)
+        }
+    }
+
+    const handleDurationChange = (e: React.SyntheticEvent<HTMLVideoElement>) => {
         const video = e.currentTarget
         if (video.duration && video.duration !== Infinity) {
             setDuration(video.duration)
@@ -52,6 +69,12 @@ export default function SharedVideoPage({ params }: { params: Promise<{ id: stri
     const handleTimeUpdate = (e: React.SyntheticEvent<HTMLVideoElement>) => {
         const video = e.currentTarget
         setCurrentTime(video.currentTime)
+        
+        // Pick up duration if it becomes available during playback
+        if ((duration === 0 || duration === Infinity) && video.duration && video.duration !== Infinity) {
+            setDuration(video.duration)
+        }
+
         if (video.duration && video.duration !== Infinity) {
             setProgress((video.currentTime / video.duration) * 100)
         }
@@ -66,10 +89,15 @@ export default function SharedVideoPage({ params }: { params: Promise<{ id: stri
     }
 
     const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (videoRef.current && duration && duration !== Infinity) {
-            const seekTime = (parseFloat(e.target.value) / 100) * duration
-            videoRef.current.currentTime = seekTime
-            setProgress(parseFloat(e.target.value))
+        const video = videoRef.current
+        if (!video) return
+
+        const d = video.duration !== Infinity ? video.duration : duration
+        if (d && d !== Infinity) {
+            const seekValue = parseFloat(e.target.value)
+            const seekTime = (seekValue / 100) * d
+            video.currentTime = seekTime
+            setProgress(seekValue)
         }
     }
 
@@ -138,16 +166,10 @@ export default function SharedVideoPage({ params }: { params: Promise<{ id: stri
                     <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white">
                         <Video className="w-4 h-4 text-white" fill="currentColor" />
                     </div>
-                    <Link href="/" className="font-bold text-gray-900 tracking-tight hover:text-black">LoomClone</Link>
-                </div>
-                <div className="flex items-center gap-3">
-                    <button className="hidden md:flex items-center gap-2 px-4 py-2 bg-black text-white rounded-full text-sm font-medium hover:scale-105 transition-transform">
-                        Sign up for free
-                    </button>
                 </div>
             </header>
 
-            <main className="max-w-[1400px] mx-auto px-4 md:px-8 py-8 md:py-12">
+            <main className="max-w-350 mx-auto px-4 md:px-8 py-8 md:py-12">
                 <div className="flex flex-col lg:flex-row gap-8 lg:gap-12">
 
                     {/* Left: Video Player */}
@@ -158,6 +180,7 @@ export default function SharedVideoPage({ params }: { params: Promise<{ id: stri
                                 src={recording.url}
                                 className="w-full h-full object-contain"
                                 onLoadedMetadata={handleLoadedMetadata}
+                                onDurationChange={handleDurationChange}
                                 onTimeUpdate={handleTimeUpdate}
                                 onPlay={() => setIsPlaying(true)}
                                 onPause={() => setIsPlaying(false)}
@@ -175,19 +198,24 @@ export default function SharedVideoPage({ params }: { params: Promise<{ id: stri
                             )}
 
                             {/* Controls Bar (Loom Style: Bottom Overlay) */}
-                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                            <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/80 to-transparent p-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                                 <div className="flex flex-col gap-2">
                                     {/* Progress Bar */}
-                                    <div className="relative h-1 group/seek cursor-pointer">
-                                        <div className="absolute inset-0 bg-white/30 rounded-full"></div>
-                                        <div className="absolute inset-y-0 left-0 bg-primary rounded-full" style={{ width: `${progress}%` }}></div>
+                                    <div className="relative h-1.5 group/seek cursor-pointer flex items-center">
+                                        <div className="absolute inset-x-0 h-1 bg-white/30 rounded-full overflow-hidden">
+                                            <div 
+                                                className="h-full bg-primary rounded-full transition-all duration-100" 
+                                                style={{ width: `${progress}%` }}
+                                            ></div>
+                                        </div>
                                         <input
                                             type="range"
                                             min="0"
                                             max="100"
+                                            step="0.1"
                                             value={progress || 0}
                                             onChange={handleSeek}
-                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                            className="absolute inset-x-0 -inset-y-2 w-full h-auto opacity-0 cursor-pointer z-10"
                                         />
                                     </div>
 
@@ -203,6 +231,30 @@ export default function SharedVideoPage({ params }: { params: Promise<{ id: stri
                                         </div>
 
                                         <div className="flex items-center gap-3 text-white">
+                                            <div className="flex items-center gap-2 group/volume relative">
+                                                <button 
+                                                    onClick={() => setIsMuted(!isMuted)} 
+                                                    className="text-white hover:text-primary transition-colors"
+                                                >
+                                                    {isMuted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+                                                </button>
+                                                <div className="w-0 group-hover/volume:w-20 overflow-hidden transition-all duration-300 flex items-center">
+                                                    <input
+                                                        type="range"
+                                                        min="0"
+                                                        max="1"
+                                                        step="0.1"
+                                                        value={isMuted ? 0 : volume}
+                                                        onChange={(e) => {
+                                                            const newVol = parseFloat(e.target.value)
+                                                            setVolume(newVol)
+                                                            if (newVol > 0) setIsMuted(false)
+                                                        }}
+                                                        className="w-16 h-1 bg-white/30 rounded-full appearance-none cursor-pointer accent-white"
+                                                    />
+                                                </div>
+                                            </div>
+
                                             <button onClick={cycleSpeed} className="bg-white/10 hover:bg-white/20 px-2 py-1 rounded text-xs font-bold w-12 text-center transition-colors">
                                                 {playbackRate}x
                                             </button>
@@ -237,7 +289,7 @@ export default function SharedVideoPage({ params }: { params: Promise<{ id: stri
                     </div>
 
                     {/* Right: Sidebar / Copy Link Panel */}
-                    <div className="lg:w-80 flex-shrink-0 flex flex-col gap-6">
+                    <div className="lg:w-80 shrink-0 flex flex-col gap-6">
                         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                             <h3 className="font-bold text-gray-900 mb-4">Share this video</h3>
 
@@ -267,7 +319,7 @@ export default function SharedVideoPage({ params }: { params: Promise<{ id: stri
                         </div>
 
                         {/* Transcript Placeholder (Loom style) */}
-                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex-1 min-h-[200px] flex flex-col items-center justify-center text-center">
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex-1 min-h-50 flex flex-col items-center justify-center text-center">
                             <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-3">
                                 <span className="text-xl">📄</span>
                             </div>
