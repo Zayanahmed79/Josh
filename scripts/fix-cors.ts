@@ -37,7 +37,7 @@ async function configureCors() {
     {
       AllowedHeaders: ["*"],
       AllowedMethods: ["PUT", "POST", "GET", "HEAD"], // PUT is critical for uploads
-      AllowedOrigins: ["http://localhost:3000", "*"], // Allow localhost and others (adjust '*' for production)
+      AllowedOrigins: ["https://josh-virid.vercel.app", "*"], // Allow localhost and others (adjust '*' for production)
       ExposeHeaders: ["ETag"],
       MaxAgeSeconds: 3600,
     },

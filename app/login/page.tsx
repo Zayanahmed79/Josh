@@ -41,7 +41,7 @@ export default function LoginPage() {
                 </p>
             </div>
 
-            <div className="mt-10 sm:mx-auto sm:w-full sm:max-w-[400px]">
+            <div className="mt-10 sm:mx-auto sm:w-full sm:max-w-100">
                 <div className="card-soft bg-white px-8 py-10">
                     <form action={handleSubmit} className="space-y-6">
                         <div>

@@ -348,7 +348,7 @@ export default function RecordPortalPage({ params }: { params: Promise<{ id: str
                                     ) : (
                                         <>
                                             <Check className="w-3.5 h-3.5" />
-                                            <span className="text-xs font-semibold">Saved to Cloud</span>
+                                            <span className="text-xs font-semibold">Saved</span>
                                         </>
                                     )}
                                 </div>
