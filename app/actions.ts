@@ -296,13 +296,12 @@ export async function checkPortalAccess(id?: string) {
             return { allowed: false };
         }
 
-        const isExpired = (Date.now() - creationTime) > EXPIRY_TIME;
-
-        return {
-            allowed: !isExpired,
-            expiresAt: creationTime + EXPIRY_TIME,
-            activeId: activeSlug
-        };
+            // Link never expires
+            return {
+                allowed: true,
+                expiresAt: undefined,
+                activeId: activeSlug
+            };
     } catch (error: any) {
         console.error('Portal Check Error:', error);
         return { allowed: false };
