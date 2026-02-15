@@ -171,7 +171,7 @@ export default function RecordPortalPage({ params }: { params: Promise<{ id: str
             if (saveResult.error) throw new Error(saveResult.error)
             
             setUploadSuccess(true)
-            toast.success('Recording saved to cloud')
+            toast.success('Recording saved')
         } catch (err: any) {
             console.error('Upload error:', err)
             toast.error(err.message || 'Upload failed, please try again')
