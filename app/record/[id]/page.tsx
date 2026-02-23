@@ -17,6 +17,7 @@ export default function RecordPortalPage({ params }: { params: Promise<{ id: str
     const [uploading, setUploading] = useState(false)
     const [uploadSuccess, setUploadSuccess] = useState(false)
     const [savedVideoId, setSavedVideoId] = useState<string | null>(null)
+    const [showGuidelineModal, setShowGuidelineModal] = useState(false)
 
     // Player State
     const [isPlaying, setIsPlaying] = useState(false)
@@ -235,12 +236,6 @@ export default function RecordPortalPage({ params }: { params: Promise<{ id: str
                 setPreviewUrl(url)
                 setRecordedBlob(videoBlob)
 
-                // Auto Upload Immediately
-                handleAutoUpload(videoBlob)
-
-                // We do NOT cleanup streams here immediately effectively, 
-                // because we might want to transition smoothly? 
-                // Actually we MUST cleanup the camera stream so the video element can switch to the Blob URL.
                 if (streamRef.current) {
                     streamRef.current.getTracks().forEach(track => track.stop())
                     streamRef.current = null
@@ -249,11 +244,9 @@ export default function RecordPortalPage({ params }: { params: Promise<{ id: str
 
             mediaRecorder.start(200) // Collect chunks every 200ms
 
-            // Set state to trigger Effect
             setIsRecording(true)
             setIsPaused(false)
 
-            // Start Timer
             const startTime = Date.now()
             timerRef.current = setInterval(() => {
                 setElapsedTime(Math.floor((Date.now() - startTime) / 1000))
@@ -288,9 +281,6 @@ export default function RecordPortalPage({ params }: { params: Promise<{ id: str
         if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'paused') {
             mediaRecorderRef.current.resume()
             setIsPaused(false)
-            // Restart timer logic is complex to be perfect, but for simple display:
-            // We just need to keep counting. 
-            // Simplified: tick every second from current count
             timerRef.current = setInterval(() => {
                 setElapsedTime(prev => prev + 1)
             }, 1000)
@@ -303,7 +293,6 @@ export default function RecordPortalPage({ params }: { params: Promise<{ id: str
         setRecordedBlob(null)
         setUploadSuccess(false)
         setSavedVideoId(null)
-        // Cleanup is already done in onstop, but ensures clean slate
         cleanupStreams()
     }
 
@@ -336,8 +325,6 @@ export default function RecordPortalPage({ params }: { params: Promise<{ id: str
             </div>
         )
     }
-
-
 
     return (
         <div className="min-h-screen bg-[#FDFDFD] flex flex-col">
@@ -552,38 +539,28 @@ export default function RecordPortalPage({ params }: { params: Promise<{ id: str
                                 )}
                             </div>
 
-                            {/* Post-Recording Actions (Main Column) */}
+                            {/* Post-Recording Info (Main Column) */}
                             {!isRecording && previewUrl && (
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center text-primary font-bold">
-                                            {name?.charAt(0) || 'A'}
-                                        </div>
-                                        <div>
-                                            <h3 className="font-bold text-gray-900 leading-none">{name || 'Anonymous'}</h3>
-                                            <span className="text-xs text-gray-400 font-medium">Recorded just now</span>
-                                        </div>
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center text-primary font-bold">
+                                        {name?.charAt(0) || 'A'}
                                     </div>
-                                    <button
-                                        onClick={retake}
-                                        className="text-gray-500 hover:text-red-600 text-sm font-medium flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-red-50 transition-all border border-transparent hover:border-red-100"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                        Discard & Retake
-                                    </button>
+                                    <div>
+                                        <h3 className="font-bold text-gray-900 leading-none">{name || 'Anonymous'}</h3>
+                                        <span className="text-xs text-gray-400 font-medium">Recorded just now</span>
+                                    </div>
                                 </div>
                             )}
                         </div>
 
-                        {/* Right: Sidebar / Copy Link Panel */}
+                        {/* Right: Sidebar / Actions Panel */}
                         {!isRecording && previewUrl && (
                             <div className="lg:w-80 shrink-0 flex flex-col gap-6 animate-in slide-in-from-right duration-500">
                                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                                    <h3 className="font-bold text-gray-900 mb-4">Share this video</h3>
-
-                                    <div className="flex flex-col gap-3">
-                                        {uploadSuccess ? (
-                                            <>
+                                    {uploadSuccess ? (
+                                        <>
+                                            <h3 className="font-bold text-gray-900 mb-4">Share this video</h3>
+                                            <div className="flex flex-col gap-3">
                                                 <button
                                                     onClick={() => {
                                                         const url = `${window.location.origin}/v/${savedVideoId}`
@@ -618,28 +595,55 @@ export default function RecordPortalPage({ params }: { params: Promise<{ id: str
                                                     <Share2 className="w-4 h-4" />
                                                     Share
                                                 </button>
-                                            </>
-                                        ) : (
-                                            <button
-                                                disabled
-                                                className="w-full h-11 bg-gray-100 text-gray-400 font-bold rounded-xl transition-all flex items-center justify-center gap-2 text-sm cursor-not-allowed"
-                                            >
-                                                <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
-                                                Generating Link...
-                                            </button>
-                                        )}
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <h3 className="font-bold text-gray-900 mb-4">Ready to save?</h3>
+                                            <div className="flex flex-col gap-3">
+                                                <button
+                                                    onClick={() => {
+                                                        setShowGuidelineModal(true)
+                                                        handleAutoUpload(recordedBlob!)
+                                                    }}
+                                                    disabled={uploading}
+                                                    className="w-full h-11 bg-gray-900 hover:bg-black text-white font-bold rounded-xl transition-all shadow-lg shadow-gray-900/10 active:scale-[0.98] flex items-center justify-center gap-2 text-sm disabled:opacity-50"
+                                                >
+                                                    {uploading ? (
+                                                        <>
+                                                            <div className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+                                                            Saving...
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Check className="w-4 h-4" />
+                                                            Submit Recording
+                                                        </>
+                                                    )}
+                                                </button>
+                                                <button
+                                                    onClick={retake}
+                                                    className="w-full h-11 bg-white hover:bg-red-50 text-gray-500 hover:text-red-600 border border-gray-100 font-bold rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-sm"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                    Discard & Retake
+                                                </button>
+                                            </div>
+                                        </>
+                                    )}
 
-                                        <div className="pt-4 border-t border-gray-100">
+                                    {uploadSuccess && (
+                                        <div className="pt-4 mt-4 border-t border-gray-100">
                                             <div className="flex items-center justify-between text-sm text-gray-500 mb-2">
                                                 <span className="flex items-center gap-1.5 font-medium">
-                                                    <span className={`w-2 h-2 rounded-full ${uploadSuccess ? 'bg-green-500' : 'bg-gray-300'}`}></span>
+                                                    <span className="w-2 h-2 rounded-full bg-green-500"></span>
                                                     Anyone with the link
                                                 </span>
                                                 <button className="text-gray-400 hover:text-gray-600 text-xs font-medium">Change</button>
                                             </div>
                                             <p className="text-xs text-gray-400">Can view this video</p>
                                         </div>
-                                    </div>
+                                    )}
                                 </div>
 
                                 {/* Transcript Placeholder */}
@@ -656,7 +660,7 @@ export default function RecordPortalPage({ params }: { params: Promise<{ id: str
                         )}
                     </div>
 
-                    {/* Footer / Context */}
+                    {/* Footer / Context (Idle State) */}
                     {!isRecording && !uploading && !previewUrl && (
                         <div className="mt-4 text-center">
                             <p className="text-gray-400 text-sm font-medium">
@@ -666,6 +670,52 @@ export default function RecordPortalPage({ params }: { params: Promise<{ id: str
                     )}
                 </div>
             </main>
+
+            {/* Guideline / Saving Modal */}
+            {showGuidelineModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-8 flex flex-col items-center text-center animate-in zoom-in-95 duration-300">
+                        <div className="w-20 h-20 bg-primary/5 rounded-full flex items-center justify-center mb-6 relative">
+                            {uploading ? (
+                                <div className="absolute inset-0 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+                            ) : (
+                                <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center">
+                                    <Check className="w-6 h-6 text-white" />
+                                </div>
+                            )}
+                            <Video className="w-8 h-8 text-primary" />
+                        </div>
+
+                        <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                            {uploadSuccess ? 'Video Ready!' : 'Saving Video'}
+                        </h3>
+                        <p className="text-gray-500 text-sm mb-8 leading-relaxed">
+                            {uploadSuccess
+                                ? "Your video has been saved successfully. You can now copy the link and share it with anyone."
+                                : "We're generating your unique video link. Once it's ready, you'll be able to share it instantly."}
+                        </p>
+
+                        {uploadSuccess ? (
+                            <button
+                                onClick={() => {
+                                    const url = `${window.location.origin}/v/${savedVideoId}`
+                                    navigator.clipboard.writeText(url)
+                                    toast.success('Link copied!')
+                                    setShowGuidelineModal(false)
+                                }}
+                                className="w-full h-12 bg-primary hover:bg-primary/90 text-white font-bold rounded-xl transition-all shadow-lg shadow-primary/20 active:scale-[0.98] flex items-center justify-center gap-2"
+                            >
+                                <Link2 className="w-4 h-4" />
+                                Copy Link
+                            </button>
+                        ) : (
+                            <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-widest animate-pulse">
+                                Processing...
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
