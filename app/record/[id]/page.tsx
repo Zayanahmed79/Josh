@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, use } from 'react'
 import { uploadVideo, checkPortalAccess, getPresignedUploadUrl, saveVideoMetadata } from '../../actions'
 import { toast } from 'sonner'
-import { Video, User, Play, Pause, Mic, Monitor, X, Check, Trash2, Volume2, VolumeX, Maximize } from 'lucide-react'
+import { Video, User, Play, Pause, Mic, Monitor, X, Check, Trash2, Volume2, VolumeX, Maximize, Link2, Share2 } from 'lucide-react'
 
 export default function RecordPortalPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params)
@@ -16,6 +16,7 @@ export default function RecordPortalPage({ params }: { params: Promise<{ id: str
     const [previewUrl, setPreviewUrl] = useState<string | null>(null)
     const [uploading, setUploading] = useState(false)
     const [uploadSuccess, setUploadSuccess] = useState(false)
+    const [savedVideoId, setSavedVideoId] = useState<string | null>(null)
 
     // Player State
     const [isPlaying, setIsPlaying] = useState(false)
@@ -145,7 +146,7 @@ export default function RecordPortalPage({ params }: { params: Promise<{ id: str
         setUploadSuccess(false)
         try {
             const userName = name || 'Anonymous';
-            
+
             // 1. Get Presigned URL
             const presignResult = await getPresignedUploadUrl(userName, blob.type || 'video/webm');
             if (presignResult.error || !presignResult.url || !presignResult.filename) {
@@ -167,9 +168,10 @@ export default function RecordPortalPage({ params }: { params: Promise<{ id: str
 
             // 3. Save Metadata
             const saveResult = await saveVideoMetadata(userName, presignResult.filename);
-            
+
             if (saveResult.error) throw new Error(saveResult.error)
-            
+
+            setSavedVideoId(saveResult.data?.id || null)
             setUploadSuccess(true)
             toast.success('Recording saved')
         } catch (err: any) {
@@ -232,7 +234,7 @@ export default function RecordPortalPage({ params }: { params: Promise<{ id: str
 
                 setPreviewUrl(url)
                 setRecordedBlob(videoBlob)
-                
+
                 // Auto Upload Immediately
                 handleAutoUpload(videoBlob)
 
@@ -300,6 +302,7 @@ export default function RecordPortalPage({ params }: { params: Promise<{ id: str
         setPreviewUrl(null)
         setRecordedBlob(null)
         setUploadSuccess(false)
+        setSavedVideoId(null)
         // Cleanup is already done in onstop, but ensures clean slate
         cleanupStreams()
     }
@@ -355,232 +358,303 @@ export default function RecordPortalPage({ params }: { params: Promise<{ id: str
             </header>
 
             <main className="flex-1 flex flex-col items-center justify-center p-4 md:p-8">
-                <div className="w-full max-w-4xl relative flex flex-col gap-6">
+                <div className={`w-full ${previewUrl ? 'max-w-7xl' : 'max-w-4xl'} relative flex flex-col gap-6`}>
 
-                    {/* Main Video Container */}
-                    <div className="relative aspect-video bg-black rounded-2xl overflow-hidden shadow-xl border border-gray-200 group">
+                    <div className={`w-full flex flex-col ${previewUrl ? 'lg:flex-row' : ''} gap-8 lg:gap-12`}>
+                        {/* Left: Video Player Area */}
+                        <div className="flex-1 min-w-0 flex flex-col gap-6">
+                            {/* Main Video Container */}
+                            <div className="relative aspect-video bg-black rounded-2xl overflow-hidden shadow-xl border border-gray-200 group">
 
-                        {/* SINGLE PERSISTENT VIDEO ELEMENT */}
-                        <video
-                            ref={videoRef}
-                            playsInline
-                            className={`w-full h-full object-contain bg-black transition-opacity duration-300 ${(isRecording || previewUrl) ? 'opacity-100' : 'opacity-0'
-                                }`}
-                            onLoadedMetadata={handleLoadedMetadata}
-                            onTimeUpdate={handleTimeUpdate}
-                            onPlay={() => setIsPlaying(true)}
-                            onPause={() => setIsPlaying(false)}
-                            onClick={() => !isRecording && previewUrl && togglePlay()}
-                        />
+                                {/* SINGLE PERSISTENT VIDEO ELEMENT */}
+                                <video
+                                    ref={videoRef}
+                                    playsInline
+                                    className={`w-full h-full object-contain bg-black transition-opacity duration-300 ${(isRecording || previewUrl) ? 'opacity-100' : 'opacity-0'
+                                        }`}
+                                    onLoadedMetadata={handleLoadedMetadata}
+                                    onTimeUpdate={handleTimeUpdate}
+                                    onPlay={() => setIsPlaying(true)}
+                                    onPause={() => setIsPlaying(false)}
+                                    onClick={() => !isRecording && previewUrl && togglePlay()}
+                                />
 
-                        {/* BIG PLAY BUTTON - PREVIEW ONLY */}
-                        {!isRecording && previewUrl && !isPlaying && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/10 hover:bg-black/20 transition-colors cursor-pointer z-10" onClick={togglePlay}>
-                                <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-2xl transform transition-transform hover:scale-110">
-                                    <Play className="w-8 h-8 text-primary fill-primary ml-1" />
-                                </div>
-                            </div>
-                        )}
-
-                        {/* CUSTOM CONTROLS - PREVIEW ONLY */}
-                        {!isRecording && previewUrl && (
-                            <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/80 to-transparent p-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-20">
-                                <div className="flex flex-col gap-2">
-                                    {/* Progress Bar */}
-                                    <div className="relative h-1.5 group/seek cursor-pointer flex items-center">
-                                        <div className="absolute inset-x-0 h-1 bg-white/30 rounded-full overflow-hidden">
-                                            <div 
-                                                className="h-full bg-primary rounded-full transition-all duration-100" 
-                                                style={{ width: `${progress}%` }}
-                                            ></div>
+                                {/* BIG PLAY BUTTON - PREVIEW ONLY */}
+                                {!isRecording && previewUrl && !isPlaying && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/10 hover:bg-black/20 transition-colors cursor-pointer z-10" onClick={togglePlay}>
+                                        <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-2xl transform transition-transform hover:scale-110">
+                                            <Play className="w-8 h-8 text-primary fill-primary ml-1" />
                                         </div>
-                                        <input
-                                            type="range"
-                                            min="0"
-                                            max="100"
-                                            step="0.1"
-                                            value={progress || 0}
-                                            onChange={handleSeek}
-                                            className="absolute inset-x-0 -inset-y-2 w-full h-auto opacity-0 cursor-pointer z-10"
-                                        />
                                     </div>
+                                )}
 
-                                    {/* Buttons */}
-                                    <div className="flex items-center justify-between mt-1">
-                                        <div className="flex items-center gap-3">
-                                            <button onClick={togglePlay} className="text-white hover:text-primary transition-colors">
-                                                {isPlaying ? <Pause className="w-5 h-5 fill-white" /> : <Play className="w-5 h-5 fill-white" />}
-                                            </button>
-                                            <span className="text-xs font-medium text-white tabular-nums">
-                                                {formatTime(currentTime)} / {formatTime(duration)}
-                                            </span>
-                                        </div>
-
-                                        <div className="flex items-center gap-3 text-white">
-                                            <div className="flex items-center gap-2 group/volume relative">
-                                                <button 
-                                                    onClick={() => setIsMuted(!isMuted)} 
-                                                    className="text-white hover:text-primary transition-colors"
-                                                >
-                                                    {isMuted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
-                                                </button>
-                                                <div className="w-0 group-hover/volume:w-20 overflow-hidden transition-all duration-300 flex items-center">
-                                                    <input
-                                                        type="range"
-                                                        min="0"
-                                                        max="1"
-                                                        step="0.1"
-                                                        value={isMuted ? 0 : volume}
-                                                        onChange={(e) => {
-                                                            const newVol = parseFloat(e.target.value)
-                                                            setVolume(newVol)
-                                                            if (newVol > 0) setIsMuted(false)
-                                                        }}
-                                                        className="w-16 h-1 bg-white/30 rounded-full appearance-none cursor-pointer accent-white"
-                                                    />
+                                {/* CUSTOM CONTROLS - PREVIEW ONLY */}
+                                {!isRecording && previewUrl && (
+                                    <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/80 to-transparent p-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-20">
+                                        <div className="flex flex-col gap-2">
+                                            {/* Progress Bar */}
+                                            <div className="relative h-1.5 group/seek cursor-pointer flex items-center">
+                                                <div className="absolute inset-x-0 h-1 bg-white/30 rounded-full overflow-hidden">
+                                                    <div
+                                                        className="h-full bg-primary rounded-full transition-all duration-100"
+                                                        style={{ width: `${progress}%` }}
+                                                    ></div>
                                                 </div>
-                                            </div>
-
-                                            <button onClick={() => videoRef.current?.requestFullscreen()} className="hover:text-primary transition-colors">
-                                                <Maximize className="w-5 h-5" />
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Placeholder / Initial State */}
-                        {!isRecording && !previewUrl && !uploading && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-50 z-0">
-                                <div className="absolute inset-0 bg-linear-to-br from-gray-50 to-white" />
-                            </div>
-                        )}
-
-                        {/* Idle State / Name Input Overlay */}
-                        {!isRecording && !uploading && !previewUrl && (
-                            <div className="absolute inset-0 bg-white/30 backdrop-blur-sm flex flex-col items-center justify-center p-6 z-10">
-                                <div className="bg-white p-8 rounded-2xl shadow-xl max-w-sm w-full border border-gray-200">
-                                    <div className="mb-8 text-center">
-                                        <div className="w-14 h-14 bg-gray-50 rounded-xl flex items-center justify-center mx-auto mb-4 border border-gray-100">
-                                            <Mic className="w-6 h-6 text-gray-900" />
-                                        </div>
-                                        <h2 className="text-xl font-semibold text-gray-900">Ready to Record?</h2>
-                                        <p className="text-sm text-gray-500 mt-2">Enter your name to start the session.</p>
-                                    </div>
-
-                                    <div className="space-y-5">
-                                        <div>
-                                            <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Name</label>
-                                            <div className="relative">
-                                                <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                                                 <input
-                                                    value={name}
-                                                    onChange={(e) => setName(e.target.value)}
-                                                    placeholder="Enter your full name"
-                                                    className="w-full h-11 bg-white border border-gray-300 rounded-lg pl-10 pr-4 text-sm focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900 transition-all outline-none placeholder:text-gray-400"
+                                                    type="range"
+                                                    min="0"
+                                                    max="100"
+                                                    step="0.1"
+                                                    value={progress || 0}
+                                                    onChange={handleSeek}
+                                                    className="absolute inset-x-0 -inset-y-2 w-full h-auto opacity-0 cursor-pointer z-10"
                                                 />
                                             </div>
-                                        </div>
 
-                                        <button
-                                            onClick={startRecording}
-                                            className="w-full h-12 bg-gray-900 hover:bg-black text-white text-sm font-semibold rounded-lg shadow-lg shadow-gray-900/10 transition-all active:scale-[0.99] flex items-center justify-center gap-2"
-                                        >
-                                            Start Recording
-                                        </button>
+                                            {/* Buttons */}
+                                            <div className="flex items-center justify-between mt-1">
+                                                <div className="flex items-center gap-3">
+                                                    <button onClick={togglePlay} className="text-white hover:text-primary transition-colors">
+                                                        {isPlaying ? <Pause className="w-5 h-5 fill-white" /> : <Play className="w-5 h-5 fill-white" />}
+                                                    </button>
+                                                    <span className="text-xs font-medium text-white tabular-nums">
+                                                        {formatTime(currentTime)} / {formatTime(duration)}
+                                                    </span>
+                                                </div>
 
-                                        <div className="flex items-center justify-center gap-4 pt-1">
-                                            <div className="flex items-center gap-1.5 text-xs text-gray-400 font-medium">
-                                                <Monitor className="w-3.5 h-3.5" />
-                                                Video & Audio
+                                                <div className="flex items-center gap-3 text-white">
+                                                    <div className="flex items-center gap-2 group/volume relative">
+                                                        <button
+                                                            onClick={() => setIsMuted(!isMuted)}
+                                                            className="text-white hover:text-primary transition-colors"
+                                                        >
+                                                            {isMuted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+                                                        </button>
+                                                        <div className="w-0 group-hover/volume:w-20 overflow-hidden transition-all duration-300 flex items-center">
+                                                            <input
+                                                                type="range"
+                                                                min="0"
+                                                                max="1"
+                                                                step="0.1"
+                                                                value={isMuted ? 0 : volume}
+                                                                onChange={(e) => {
+                                                                    const newVol = parseFloat(e.target.value)
+                                                                    setVolume(newVol)
+                                                                    if (newVol > 0) setIsMuted(false)
+                                                                }}
+                                                                className="w-16 h-1 bg-white/30 rounded-full appearance-none cursor-pointer accent-white"
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    <button onClick={() => videoRef.current?.requestFullscreen()} className="hover:text-primary transition-colors">
+                                                        <Maximize className="w-5 h-5" />
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
-                                </div>
-                            </div>
-                        )}
+                                )}
 
-                        {/* Upload Status Overlay (Non-blocking) */}
-                        {(uploading || uploadSuccess) && previewUrl && (
-                            <div className="absolute top-4 right-4 z-20 pointer-events-none">
-                                <div className={`px-3 py-1.5 rounded-lg backdrop-blur-md border shadow-sm flex items-center gap-2 transition-all ${
-                                    uploading 
-                                        ? 'bg-white/90 border-blue-200 text-blue-700' 
-                                        : 'bg-white/90 border-green-200 text-green-700'
-                                }`}>
-                                    {uploading ? (
-                                        <>
-                                            <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
-                                            <span className="text-xs font-semibold">Uploading...</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Check className="w-3.5 h-3.5" />
-                                            <span className="text-xs font-semibold">Saved</span>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Live Recording Controls Overlay */}
-                        {isRecording && (
-                            <div className="absolute inset-x-0 bottom-8 flex justify-center items-end pointer-events-none fade-in z-20">
-                                {/* Floating Control Bar */}
-                                <div className="h-14 px-5 bg-[#1C1C1E] text-white rounded-xl shadow-xl flex items-center gap-5 pointer-events-auto transition-transform hover:scale-[1.02] border border-white/10">
-
-                                    {/* Timer */}
-                                    <div className="flex items-center gap-3 pr-5 border-r border-white/10">
-                                        <div className={`w-2 h-2 rounded-full ${isPaused ? 'bg-yellow-500' : 'bg-red-500 animate-pulse'}`}></div>
-                                        <span className="font-mono font-medium text-base tabular-nums tracking-wide">
-                                            {formatDuration(elapsedTime)}
-                                        </span>
+                                {/* Placeholder / Initial State */}
+                                {!isRecording && !previewUrl && !uploading && (
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-50 z-0">
+                                        <div className="absolute inset-0 bg-linear-to-br from-gray-50 to-white" />
                                     </div>
+                                )}
 
-                                    {/* Controls */}
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            onClick={retake}
-                                            className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-white/10 text-gray-400 hover:text-white transition-all"
-                                            title="Discard & Restart"
-                                        >
-                                            <Trash2 className="w-4.5 h-4.5" />
-                                        </button>
+                                {/* Idle State / Name Input Overlay */}
+                                {!isRecording && !uploading && !previewUrl && (
+                                    <div className="absolute inset-0 bg-white/30 backdrop-blur-sm flex flex-col items-center justify-center p-6 z-10">
+                                        <div className="bg-white p-8 rounded-2xl shadow-xl max-w-sm w-full border border-gray-200">
+                                            <div className="mb-8 text-center">
+                                                <div className="w-14 h-14 bg-gray-50 rounded-xl flex items-center justify-center mx-auto mb-4 border border-gray-100">
+                                                    <Mic className="w-6 h-6 text-gray-900" />
+                                                </div>
+                                                <h2 className="text-xl font-semibold text-gray-900">Ready to Record?</h2>
+                                                <p className="text-sm text-gray-500 mt-2">Enter your name to start the session.</p>
+                                            </div>
 
-                                        <button
-                                            onClick={isPaused ? resumeRecording : pauseRecording}
-                                            className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-white/10 transition-all text-white"
-                                            title={isPaused ? "Resume" : "Pause"}
-                                        >
-                                            {isPaused ? <Play className="w-4.5 h-4.5 fill-white" /> : <Pause className="w-4.5 h-4.5 fill-white" />}
-                                        </button>
+                                            <div className="space-y-5">
+                                                <div>
+                                                    <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Name</label>
+                                                    <div className="relative">
+                                                        <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                                        <input
+                                                            value={name}
+                                                            onChange={(e) => setName(e.target.value)}
+                                                            placeholder="Enter your full name"
+                                                            className="w-full h-11 bg-white border border-gray-300 rounded-lg pl-10 pr-4 text-sm focus:ring-2 focus:ring-gray-900/10 focus:border-gray-900 transition-all outline-none placeholder:text-gray-400"
+                                                        />
+                                                    </div>
+                                                </div>
 
-                                        <button
-                                            onClick={stopRecording}
-                                            className="w-9 h-9 rounded-lg bg-red-600 hover:bg-red-500 flex items-center justify-center transition-all shadow-lg shadow-red-600/20 active:scale-95 ml-2"
-                                            title="Finish Recording"
-                                        >
-                                            <div className="w-3.5 h-3.5 bg-white rounded-xs"></div>
-                                        </button>
+                                                <button
+                                                    onClick={startRecording}
+                                                    className="w-full h-12 bg-gray-900 hover:bg-black text-white text-sm font-semibold rounded-lg shadow-lg shadow-gray-900/10 transition-all active:scale-[0.99] flex items-center justify-center gap-2"
+                                                >
+                                                    Start Recording
+                                                </button>
+
+                                                <div className="flex items-center justify-center gap-4 pt-1">
+                                                    <div className="flex items-center gap-1.5 text-xs text-gray-400 font-medium">
+                                                        <Monitor className="w-3.5 h-3.5" />
+                                                        Video & Audio
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
+                                )}
+
+                                {/* Live Recording Controls Overlay */}
+                                {isRecording && (
+                                    <div className="absolute inset-x-0 bottom-8 flex justify-center items-end pointer-events-none fade-in z-20">
+                                        {/* Floating Control Bar */}
+                                        <div className="h-14 px-5 bg-[#1C1C1E] text-white rounded-xl shadow-xl flex items-center gap-5 pointer-events-auto transition-transform hover:scale-[1.02] border border-white/10">
+
+                                            {/* Timer */}
+                                            <div className="flex items-center gap-3 pr-5 border-r border-white/10">
+                                                <div className={`w-2 h-2 rounded-full ${isPaused ? 'bg-yellow-500' : 'bg-red-500 animate-pulse'}`}></div>
+                                                <span className="font-mono font-medium text-base tabular-nums tracking-wide">
+                                                    {formatDuration(elapsedTime)}
+                                                </span>
+                                            </div>
+
+                                            {/* Controls */}
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={retake}
+                                                    className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-white/10 text-gray-400 hover:text-white transition-all"
+                                                    title="Discard & Restart"
+                                                >
+                                                    <Trash2 className="w-4.5 h-4.5" />
+                                                </button>
+
+                                                <button
+                                                    onClick={isPaused ? resumeRecording : pauseRecording}
+                                                    className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-white/10 transition-all text-white"
+                                                    title={isPaused ? "Resume" : "Pause"}
+                                                >
+                                                    {isPaused ? <Play className="w-4.5 h-4.5 fill-white" /> : <Pause className="w-4.5 h-4.5 fill-white" />}
+                                                </button>
+
+                                                <button
+                                                    onClick={stopRecording}
+                                                    className="w-9 h-9 rounded-lg bg-red-600 hover:bg-red-500 flex items-center justify-center transition-all shadow-lg shadow-red-600/20 active:scale-95 ml-2"
+                                                    title="Finish Recording"
+                                                >
+                                                    <div className="w-3.5 h-3.5 bg-white rounded-xs"></div>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Post-Recording Actions (Main Column) */}
+                            {!isRecording && previewUrl && (
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center text-primary font-bold">
+                                            {name?.charAt(0) || 'A'}
+                                        </div>
+                                        <div>
+                                            <h3 className="font-bold text-gray-900 leading-none">{name || 'Anonymous'}</h3>
+                                            <span className="text-xs text-gray-400 font-medium">Recorded just now</span>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={retake}
+                                        className="text-gray-500 hover:text-red-600 text-sm font-medium flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-red-50 transition-all border border-transparent hover:border-red-100"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                        Discard & Retake
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Right: Sidebar / Copy Link Panel */}
+                        {!isRecording && previewUrl && (
+                            <div className="lg:w-80 shrink-0 flex flex-col gap-6 animate-in slide-in-from-right duration-500">
+                                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                                    <h3 className="font-bold text-gray-900 mb-4">Share this video</h3>
+
+                                    <div className="flex flex-col gap-3">
+                                        {uploadSuccess ? (
+                                            <>
+                                                <button
+                                                    onClick={() => {
+                                                        const url = `${window.location.origin}/v/${savedVideoId}`
+                                                        navigator.clipboard.writeText(url)
+                                                        toast.success('Link copied!')
+                                                    }}
+                                                    className="w-full h-11 bg-primary hover:bg-primary/90 text-white font-bold rounded-xl transition-all shadow-lg shadow-primary/20 active:scale-[0.98] flex items-center justify-center gap-2 text-sm"
+                                                >
+                                                    <Link2 className="w-4 h-4" />
+                                                    Copy Link
+                                                </button>
+                                                <button
+                                                    onClick={async () => {
+                                                        const url = `${window.location.origin}/v/${savedVideoId}`
+                                                        if (navigator.share) {
+                                                            try {
+                                                                await navigator.share({
+                                                                    title: 'Video Recording',
+                                                                    text: 'Check out my video recording!',
+                                                                    url: url,
+                                                                })
+                                                            } catch (err) {
+                                                                console.error('Share failed:', err)
+                                                            }
+                                                        } else {
+                                                            navigator.clipboard.writeText(url)
+                                                            toast.success('Link copied to clipboard!')
+                                                        }
+                                                    }}
+                                                    className="w-full h-11 bg-white hover:bg-gray-50 text-gray-900 border border-gray-200 font-bold rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-sm"
+                                                >
+                                                    <Share2 className="w-4 h-4" />
+                                                    Share
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <button
+                                                disabled
+                                                className="w-full h-11 bg-gray-100 text-gray-400 font-bold rounded-xl transition-all flex items-center justify-center gap-2 text-sm cursor-not-allowed"
+                                            >
+                                                <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                                                Generating Link...
+                                            </button>
+                                        )}
+
+                                        <div className="pt-4 border-t border-gray-100">
+                                            <div className="flex items-center justify-between text-sm text-gray-500 mb-2">
+                                                <span className="flex items-center gap-1.5 font-medium">
+                                                    <span className={`w-2 h-2 rounded-full ${uploadSuccess ? 'bg-green-500' : 'bg-gray-300'}`}></span>
+                                                    Anyone with the link
+                                                </span>
+                                                <button className="text-gray-400 hover:text-gray-600 text-xs font-medium">Change</button>
+                                            </div>
+                                            <p className="text-xs text-gray-400">Can view this video</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Transcript Placeholder */}
+                                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex-1 min-h-[300px] flex flex-col items-center justify-center text-center">
+                                    <div className="w-12 h-12 bg-gray-50 rounded-xl flex items-center justify-center mb-4 border border-gray-100">
+                                        <svg className="w-6 h-6 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                    </div>
+                                    <h4 className="font-bold text-gray-900 text-sm mb-1">Transcript</h4>
+                                    <p className="text-xs text-gray-400 max-w-[180px]">No transcript available for this video session.</p>
                                 </div>
                             </div>
                         )}
                     </div>
-
-                    {/* Post-Recording Actions */}
-                    {!isRecording && previewUrl && (
-                        <div className="flex justify-center mt-6 animate-in fade-in duration-500">
-                             <button
-                                onClick={retake}
-                                className="text-gray-500 hover:text-red-600 text-sm font-medium flex items-center gap-2 px-5 py-2.5 rounded-lg hover:bg-red-50 transition-all border border-transparent hover:border-red-100"
-                            >
-                                <Trash2 className="w-4 h-4" />
-                                Discard & Record New
-                            </button>
-                        </div>
-                    )}
 
                     {/* Footer / Context */}
                     {!isRecording && !uploading && !previewUrl && (

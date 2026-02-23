@@ -381,10 +381,10 @@ export async function saveVideoMetadata(name: string, filename: string) {
     try {
         const videoUrl = `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${filename}`;
         
-        const { error } = await supabase.from('videourl').insert({ name, url: videoUrl });
+        const { data, error } = await supabase.from('videourl').insert({ name, url: videoUrl }).select().single();
         if (error) throw error;
         
-        return { success: true, videoUrl };
+        return { success: true, videoUrl, data };
     } catch (error: any) {
         console.error('Save Metadata Error:', error);
         return { error: error.message || 'Failed to save recording' };
