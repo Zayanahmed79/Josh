@@ -692,7 +692,7 @@ export default function RecordPortalPage({ params }: { params: Promise<{ id: str
                         <p className="text-gray-500 text-sm mb-8 leading-relaxed">
                             {uploadSuccess
                                 ? "Your video has been saved successfully. You can now copy the link and share it with anyone."
-                                : "We're generating your unique video link. Once it's ready, you'll be able to share it instantly."}
+                                : "Generating your unique video link. Once it's ready, you'll be able to share it instantly."}
                         </p>
 
                         {uploadSuccess ? (
