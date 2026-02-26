@@ -319,7 +319,7 @@ export default function RecordPortalPage({ params }: { params: Promise<{ id: str
                     </div>
                     <h2 className="text-xl font-bold text-gray-900 mb-2">Access Denied</h2>
                     <p className="text-sm text-gray-500 mb-6">
-                        This recording link is invalid or has expired.
+                        This recording link is invalid or you do not have permission to access it.
                     </p>
                 </div>
             </div>

@@ -21,8 +21,6 @@ export default function DashboardClient({ initialRecordings }: { initialRecordin
     const [currentPage, setCurrentPage] = useState(1)
     const [deletingId, setDeletingId] = useState<string | null>(null)
     const [isDeleting, setIsDeleting] = useState(false)
-    const [renewingId, setRenewingId] = useState<string | null>(null)
-    const [isRenewingPortal, setIsRenewingPortal] = useState(false)
     const [portalStatus, setPortalStatus] = useState<{ allowed: boolean, expiresAt?: number, activeId?: string } | null>(null)
 
     useEffect(() => {
@@ -54,7 +52,7 @@ export default function DashboardClient({ initialRecordings }: { initialRecordin
 
     const copyGeneralLink = () => {
         if (!portalStatus?.activeId) {
-            toast.error('Portal is not active. Please renew first.')
+            toast.error('Portal is not active.')
             return
         }
         const url = `${window.location.origin}/record/${portalStatus.activeId}`
@@ -81,36 +79,6 @@ export default function DashboardClient({ initialRecordings }: { initialRecordin
             setRecordings(prev => prev.filter(rec => rec.id !== deletingId))
             toast.success('Recording deleted successfully')
             setDeletingId(null)
-        }
-    }
-
-    const handleRenew = async (id: string) => {
-        setRenewingId(id)
-        const res = await renewRecording(id)
-        setRenewingId(null)
-
-        if (res.error) {
-            toast.error(res.error)
-        } else {
-            // Replace the old recording with the fresh one in the list
-            setRecordings(prev => prev.map(rec =>
-                rec.id === id ? { ...res.data, isExpired: false } : rec
-            ))
-            toast.success('Link renewed successfully!')
-        }
-    }
-
-    const handleRenewPortal = async () => {
-        setIsRenewingPortal(true)
-        const res = await renewPortal()
-        setIsRenewingPortal(false)
-
-        if (res.error) {
-            toast.error(res.error)
-        } else {
-            toast.success('Public portal link renewed!')
-            // Refresh status immediately from the result
-            setPortalStatus({ allowed: true, activeId: res.id })
         }
     }
 
@@ -184,13 +152,13 @@ export default function DashboardClient({ initialRecordings }: { initialRecordin
                     ) : (
                         [
                             { label: 'Total Videos', value: recordings.length, icon: Video, color: 'text-gray-900', bg: 'bg-gray-100' },
-                            { 
-                                label: 'Portal Status', 
-                                value: portalStatus.allowed ? 'Active' : 'Expired', 
-                                icon: Sparkles, 
-                                color: portalStatus.allowed ? 'text-green-600' : 'text-amber-600', 
-                                bg: portalStatus.allowed ? 'bg-green-50' : 'bg-amber-50', 
-                                portal: true 
+                            {
+                                label: 'Portal Status',
+                                value: portalStatus.allowed ? 'Active' : 'Expired',
+                                icon: Sparkles,
+                                color: portalStatus.allowed ? 'text-green-600' : 'text-amber-600',
+                                bg: portalStatus.allowed ? 'bg-green-50' : 'bg-amber-50',
+                                portal: true
                             },
                             { label: 'Completed Uploads', value: recordings.length, icon: CheckCircle, color: 'text-blue-600', bg: 'bg-blue-50' },
                             { label: 'Last Activity', value: recordings.length > 0 && recordings[0].created_at ? new Date(recordings[0].created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'N/A', icon: Calendar, color: 'text-purple-600', bg: 'bg-purple-50' }
@@ -203,15 +171,6 @@ export default function DashboardClient({ initialRecordings }: { initialRecordin
                                     <span className="text-xs font-medium text-gray-500 uppercase tracking-wide leading-none mb-2">{stat.label}</span>
                                     <div className="flex items-baseline gap-2">
                                         <span className="text-2xl font-semibold text-gray-900 tracking-tight">{stat.value}</span>
-                                        {stat.portal && !portalStatus.allowed && (
-                                            <button
-                                                onClick={handleRenewPortal}
-                                                disabled={isRenewingPortal}
-                                                className="ml-auto text-xs font-bold text-primary uppercase tracking-wider hover:underline"
-                                            >
-                                                {isRenewingPortal ? '...' : 'Renew'}
-                                            </button>
-                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -283,11 +242,6 @@ export default function DashboardClient({ initialRecordings }: { initialRecordin
                                             <div className="rounded bg-black/70 backdrop-blur-md px-1.5 py-0.5 text-[10px] font-bold text-white uppercase tracking-wide">
                                                 HD
                                             </div>
-                                            {rec.isExpired && (
-                                                <div className="rounded bg-red-600/90 backdrop-blur-md px-1.5 py-0.5 text-[10px] font-bold text-white uppercase tracking-wide">
-                                                    Expired
-                                                </div>
-                                            )}
                                         </div>
                                     </div>
 
@@ -305,33 +259,16 @@ export default function DashboardClient({ initialRecordings }: { initialRecordin
                                         </div>
 
                                         <div className="flex flex-col gap-2.5">
-                                            {rec.isExpired ? (
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        if (rec.id) handleRenew(rec.id);
-                                                    }}
-                                                    disabled={renewingId === rec.id}
-                                                    className="w-full h-9 rounded-lg bg-pink-50 text-pink-600 border border-pink-100 flex items-center justify-center text-xs font-semibold uppercase tracking-wide hover:bg-pink-100 transition-colors"
-                                                >
-                                                    {renewingId === rec.id ? (
-                                                        <RefreshCcw className="mr-2 h-3.5 w-3.5 animate-spin" />
-                                                    ) : (
-                                                        <RefreshCcw className="mr-2 h-3.5 w-3.5" />
-                                                    )}
-                                                    Renew Link
-                                                </button>
-                                            ) : (
-                                                <Link
-                                                    href={`/v/${rec.id}`}
-                                                    target="_blank"
-                                                    onClick={(e) => e.stopPropagation()}
-                                                    className="w-full h-9 rounded-lg bg-gray-900 text-white flex items-center justify-center text-xs font-semibold uppercase tracking-wide hover:bg-gray-800 transition-colors shadow-sm"
-                                                >
-                                                    <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                                                    Review
-                                                </Link>
-                                            )}
+                                            <Link
+                                                href={`/v/${rec.id}`}
+                                                target="_blank"
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="w-full h-9 rounded-lg bg-gray-900 text-white flex items-center justify-center text-xs font-semibold uppercase tracking-wide hover:bg-gray-800 transition-colors shadow-sm"
+                                            >
+                                                <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                                                Review
+                                            </Link>
+
 
                                             <div className="flex gap-2">
                                                 <button
@@ -376,18 +313,58 @@ export default function DashboardClient({ initialRecordings }: { initialRecordin
                                 </button>
 
                                 <div className="flex items-center gap-1">
-                                    {[...Array(totalPages)].map((_, i) => (
-                                        <button
-                                            key={i}
-                                            onClick={() => setCurrentPage(i + 1)}
-                                            className={`w-9 h-9 rounded-lg text-sm font-medium transition-all ${currentPage === i + 1
-                                                ? 'bg-primary text-white shadow-sm'
-                                                : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
-                                                }`}
-                                        >
-                                            {i + 1}
-                                        </button>
-                                    ))}
+                                    {(() => {
+                                        const pages = []
+                                        const showPages = 5 // Max number of intermediate pages to show
+
+                                        if (totalPages <= 7) {
+                                            for (let i = 1; i <= totalPages; i++) pages.push(i)
+                                        } else {
+                                            pages.push(1)
+
+                                            let start = Math.max(2, currentPage - 1)
+                                            let end = Math.min(totalPages - 1, currentPage + 1)
+
+                                            // Adjust if at the beginning or end
+                                            if (currentPage <= 3) {
+                                                end = 4
+                                            } else if (currentPage >= totalPages - 2) {
+                                                start = totalPages - 3
+                                            }
+
+                                            if (start > 2) pages.push('ellipsis-start')
+
+                                            for (let i = start; i <= end; i++) {
+                                                pages.push(i)
+                                            }
+
+                                            if (end < totalPages - 1) pages.push('ellipsis-end')
+
+                                            pages.push(totalPages)
+                                        }
+
+                                        return pages.map((p, i) => {
+                                            if (typeof p === 'string') {
+                                                return (
+                                                    <span key={i} className="w-9 h-9 flex items-center justify-center text-gray-400">
+                                                        ...
+                                                    </span>
+                                                )
+                                            }
+                                            return (
+                                                <button
+                                                    key={i}
+                                                    onClick={() => setCurrentPage(p)}
+                                                    className={`w-9 h-9 rounded-lg text-sm font-medium transition-all ${currentPage === p
+                                                        ? 'bg-primary text-white shadow-sm'
+                                                        : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+                                                        }`}
+                                                >
+                                                    {p}
+                                                </button>
+                                            )
+                                        })
+                                    })()}
                                 </div>
 
                                 <button

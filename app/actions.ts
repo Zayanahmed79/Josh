@@ -6,7 +6,7 @@ import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } fro
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { supabase } from '@/lib/supabase'
 
-const EXPIRY_TIME = 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
+const EXPIRY_TIME = 100 * 365 * 24 * 60 * 60 * 1000 // 100 years (effectively permanent)
 const PORTAL_CONFIG_KEY = '__PORTAL_CONFIG__'
 
 export async function login(prevState: any, formData: FormData) {
@@ -110,7 +110,7 @@ export async function getRecordings() {
 
     const processedData = data?.map(rec => ({
         ...rec,
-        isExpired: (Date.now() - new Date(rec.created_at).getTime()) > EXPIRY_TIME
+        isExpired: false
     }));
 
     return { data: processedData };
@@ -128,13 +128,6 @@ export async function getRecording(id: string) {
         return { error: error?.message || 'Recording not found' };
     }
 
-    // Check for expiration (7 days)
-    const creationTime = new Date(data.created_at).getTime();
-    const isExpired = (Date.now() - creationTime) > EXPIRY_TIME;
-
-    if (isExpired) {
-        return { error: 'LINK_EXPIRED', data: { name: data.name } };
-    }
 
     // Generate a secure presigned URL for viewing (even if the bucket is private)
     try {
@@ -296,12 +289,12 @@ export async function checkPortalAccess(id?: string) {
             return { allowed: false };
         }
 
-            // Link never expires
-            return {
-                allowed: true,
-                expiresAt: undefined,
-                activeId: activeSlug
-            };
+        // Link never expires
+        return {
+            allowed: true,
+            expiresAt: undefined,
+            activeId: activeSlug
+        };
     } catch (error: any) {
         console.error('Portal Check Error:', error);
         return { allowed: false };
@@ -361,7 +354,7 @@ export async function getPresignedUploadUrl(userName: string, fileType: string) 
 
         const extension = fileType.split('/')[1] || 'webm';
         const filename = `recording-${Date.now()}-${userName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.${extension}`;
-        
+
         const command = new PutObjectCommand({
             Bucket: process.env.S3_BUCKET_NAME,
             Key: filename,
@@ -380,10 +373,10 @@ export async function getPresignedUploadUrl(userName: string, fileType: string) 
 export async function saveVideoMetadata(name: string, filename: string) {
     try {
         const videoUrl = `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${filename}`;
-        
+
         const { data, error } = await supabase.from('videourl').insert({ name, url: videoUrl }).select().single();
         if (error) throw error;
-        
+
         return { success: true, videoUrl, data };
     } catch (error: any) {
         console.error('Save Metadata Error:', error);

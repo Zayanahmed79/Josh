@@ -22,9 +22,7 @@ export default function SharedVideoPage({ params }: { params: Promise<{ id: stri
     useEffect(() => {
         async function load() {
             const res = await getRecording(id)
-            if (res.error === 'LINK_EXPIRED') {
-                setRecording({ expired: true, name: res.data?.name })
-            } else if (res.error) {
+            if (res.error) {
                 toast.error('Failed to load video')
             } else {
                 setRecording(res.data)
@@ -69,7 +67,7 @@ export default function SharedVideoPage({ params }: { params: Promise<{ id: stri
     const handleTimeUpdate = (e: React.SyntheticEvent<HTMLVideoElement>) => {
         const video = e.currentTarget
         setCurrentTime(video.currentTime)
-        
+
         // Pick up duration if it becomes available during playback
         if ((duration === 0 || duration === Infinity) && video.duration && video.duration !== Infinity) {
             setDuration(video.duration)
@@ -142,22 +140,6 @@ export default function SharedVideoPage({ params }: { params: Promise<{ id: stri
         )
     }
 
-    if (recording.expired) {
-        return (
-            <div className="min-h-screen flex flex-col items-center justify-center bg-[#FAFAFA] p-4">
-                <div className="max-w-md w-full bg-white p-10 rounded-2xl shadow-sm border border-black/5 text-center">
-                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <Clock className="w-8 h-8 text-gray-400" />
-                    </div>
-                    <h2 className="text-xl font-bold text-gray-900 mb-2">{recording.name}</h2>
-                    <p className="text-sm text-gray-500 mb-8 leading-relaxed">
-                        This video has expired and is no longer available for viewing.
-                    </p>
-                </div>
-            </div>
-        )
-    }
-
     return (
         <div className="min-h-screen bg-[#FDFDFD]">
             {/* Header */}
@@ -203,8 +185,8 @@ export default function SharedVideoPage({ params }: { params: Promise<{ id: stri
                                     {/* Progress Bar */}
                                     <div className="relative h-1.5 group/seek cursor-pointer flex items-center">
                                         <div className="absolute inset-x-0 h-1 bg-white/30 rounded-full overflow-hidden">
-                                            <div 
-                                                className="h-full bg-primary rounded-full transition-all duration-100" 
+                                            <div
+                                                className="h-full bg-primary rounded-full transition-all duration-100"
                                                 style={{ width: `${progress}%` }}
                                             ></div>
                                         </div>
@@ -232,8 +214,8 @@ export default function SharedVideoPage({ params }: { params: Promise<{ id: stri
 
                                         <div className="flex items-center gap-3 text-white">
                                             <div className="flex items-center gap-2 group/volume relative">
-                                                <button 
-                                                    onClick={() => setIsMuted(!isMuted)} 
+                                                <button
+                                                    onClick={() => setIsMuted(!isMuted)}
                                                     className="text-white hover:text-primary transition-colors"
                                                 >
                                                     {isMuted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
