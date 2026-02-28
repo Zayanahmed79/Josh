@@ -154,10 +154,10 @@ export default function DashboardClient({ initialRecordings }: { initialRecordin
                             { label: 'Total Videos', value: recordings.length, icon: Video, color: 'text-gray-900', bg: 'bg-gray-100' },
                             {
                                 label: 'Portal Status',
-                                value: portalStatus.allowed ? 'Active' : 'Expired',
+                                value: 'Active',
                                 icon: Sparkles,
-                                color: portalStatus.allowed ? 'text-green-600' : 'text-amber-600',
-                                bg: portalStatus.allowed ? 'bg-green-50' : 'bg-amber-50',
+                                color: 'text-green-600',
+                                bg: 'bg-green-50',
                                 portal: true
                             },
                             { label: 'Completed Uploads', value: recordings.length, icon: CheckCircle, color: 'text-blue-600', bg: 'bg-blue-50' },
