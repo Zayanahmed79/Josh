@@ -271,25 +271,36 @@ export async function renewRecording(id: string) {
 export async function checkPortalAccess(id?: string) {
     try {
         // Fetch the config row from Supabase
-        const { data: config, error } = await supabase
+        let { data: config, error } = await supabase
             .from('videourl')
             .select('*')
             .eq('name', PORTAL_CONFIG_KEY)
             .single();
 
+        let activeSlug = config?.url;
+
+        // Auto-create a permanent portal link if one doesn't exist
         if (error || !config) {
-            return { allowed: false };
+            activeSlug = Math.random().toString(36).substring(2, 10);
+            const { data: newConfig, error: insertError } = await supabase
+                .from('videourl')
+                .insert({
+                    name: PORTAL_CONFIG_KEY,
+                    url: activeSlug
+                })
+                .select()
+                .single();
+            
+            if (insertError) {
+                console.error('Failed to create default portal:', insertError);
+                return { allowed: false };
+            }
+            config = newConfig;
         }
 
-        const activeSlug = config.url; // We rely on 'url' column to store the slug
-        const creationTime = new Date(config.created_at).getTime();
+        // Link never expires and is always active. 
+        // We do not enforce id matching to ensure old links continue to work permanently.
 
-        // If an ID is provided, it must match the active one
-        if (id && id !== activeSlug) {
-            return { allowed: false };
-        }
-
-        // Link never expires
         return {
             allowed: true,
             expiresAt: undefined,

@@ -51,8 +51,12 @@ export default function DashboardClient({ initialRecordings }: { initialRecordin
     }, [searchTerm, totalPages, currentPage, filteredRecordings.length, startIndex])
 
     const copyGeneralLink = () => {
-        if (!portalStatus?.activeId) {
-            toast.error('Portal is not active.')
+        if (portalStatus === null) {
+            toast.error('Portal is loading, please try again in a moment.')
+            return
+        }
+        if (!portalStatus.activeId) {
+            toast.error('Portal configuration could not be loaded.')
             return
         }
         const url = `${window.location.origin}/record/${portalStatus.activeId}`
