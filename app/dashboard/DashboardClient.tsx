@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Copy, Video, Play, Calendar, ExternalLink, Share2, Search, Filter, LogOut, CheckCircle, Trash2, AlertTriangle, X, RefreshCcw, Sparkles } from 'lucide-react'
+import { Copy, Video, Play, Calendar, ExternalLink, Share2, Search, Filter, LogOut, CheckCircle, Trash2, AlertTriangle, X, RefreshCcw, Sparkles, Download } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
-import { logout, deleteRecording, renewRecording, renewPortal, checkPortalAccess } from '../actions'
+import { logout, deleteRecording, renewRecording, renewPortal, checkPortalAccess, getDownloadUrl } from '../actions'
 import Link from 'next/link'
 
 interface Recording {
@@ -83,6 +83,24 @@ export default function DashboardClient({ initialRecordings }: { initialRecordin
             setRecordings(prev => prev.filter(rec => rec.id !== deletingId))
             toast.success('Recording deleted successfully')
             setDeletingId(null)
+        }
+    }
+
+    const handleDownload = async (id: string) => {
+        const loadingToast = toast.loading('Preparing download...')
+        const res = await getDownloadUrl(id)
+
+        if (res.error) {
+            toast.error(res.error, { id: loadingToast })
+        } else if (res.url) {
+            toast.success('Download starting...', { id: loadingToast })
+            // Use a temporary anchor to trigger download
+            const link = document.createElement('a')
+            link.href = res.url
+            // S3 signed URLs with attachment disposition will handle the download correctly
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
         }
     }
 
@@ -291,9 +309,19 @@ export default function DashboardClient({ initialRecordings }: { initialRecordin
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
+                                                        if (rec.id) handleDownload(rec.id);
+                                                    }}
+                                                    className="w-9 h-9 shrink-0 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-gray-400 hover:text-primary hover:border-primary/20 hover:bg-primary/5 transition-all outline-none"
+                                                    title="Download"
+                                                >
+                                                    <Download className="h-4 w-4" />
+                                                </button>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
                                                         if (rec.id) setDeletingId(rec.id);
                                                     }}
-                                                    className="w-9 h-9 shrink-0 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-gray-400 hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-all"
+                                                    className="w-9 h-9 shrink-0 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-gray-400 hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-all outline-none"
                                                     title="Delete"
                                                 >
                                                     <Trash2 className="h-4 w-4" />

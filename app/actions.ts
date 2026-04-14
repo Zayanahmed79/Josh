@@ -139,8 +139,7 @@ export async function getRecording(id: string) {
             },
         });
 
-        const urlParts = data.url.split('/');
-        const filename = urlParts[urlParts.length - 1];
+        const filename = data.url.split('?')[0].split('/').pop() || '';
 
         const command = new GetObjectCommand({
             Bucket: process.env.S3_BUCKET_NAME,
@@ -193,8 +192,7 @@ export async function deleteRecording(id: string) {
             },
         });
 
-        const urlParts = recording.url.split('/');
-        const filename = urlParts[urlParts.length - 1];
+        const filename = recording.url.split('?')[0].split('/').pop() || '';
 
         const deleteCommand = new DeleteObjectCommand({
             Bucket: process.env.S3_BUCKET_NAME,
@@ -244,7 +242,7 @@ export async function renewRecording(id: string) {
             .from('videourl')
             .insert({
                 name: recording.name,
-                url: recording.url.split('?')[0] // Ensure we save the clean URL without old presign tokens
+                url: recording.url.split('?')[0] // Keep the same S3 path (including codecs if present) but strip old query params
             })
             .select()
             .single();
@@ -363,7 +361,7 @@ export async function getPresignedUploadUrl(userName: string, fileType: string) 
             },
         });
 
-        const extension = fileType.split('/')[1] || 'webm';
+        const extension = (fileType.split('/')[1] || 'webm').split(';')[0];
         const filename = `recording-${Date.now()}-${userName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.${extension}`;
 
         const command = new PutObjectCommand({
@@ -392,5 +390,54 @@ export async function saveVideoMetadata(name: string, filename: string) {
     } catch (error: any) {
         console.error('Save Metadata Error:', error);
         return { error: error.message || 'Failed to save recording' };
+    }
+}
+
+export async function getDownloadUrl(id: string) {
+    const cookieStore = await cookies();
+    const session = cookieStore.get('session');
+
+    if (session?.value !== 'admin') {
+        return { error: 'Unauthorized' };
+    }
+
+    try {
+        const { data: recording, error: fetchError } = await supabase
+            .from('videourl')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (fetchError || !recording) {
+            throw new Error(fetchError?.message || 'Recording not found');
+        }
+
+        const s3 = new S3Client({
+            region: process.env.AWS_REGION,
+            credentials: {
+                accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+                secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+            },
+        });
+
+        // Parse clean S3 key
+        const filename = recording.url.split('?')[0].split('/').pop() || '';
+        const extension = filename.split(';')[0].split('.').pop() || 'mp4';
+        
+        // Sanitize name for download filename
+        const safeName = recording.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+
+        const command = new GetObjectCommand({
+            Bucket: process.env.S3_BUCKET_NAME,
+            Key: filename,
+            ResponseContentDisposition: `attachment; filename="${safeName}.${extension}"`
+        });
+
+        const presignedUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
+
+        return { success: true, url: presignedUrl };
+    } catch (error: any) {
+        console.error('Download Action Error:', error);
+        return { error: error.message || 'Failed to generate download link' };
     }
 }
